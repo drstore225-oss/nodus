@@ -1,0 +1,148 @@
+import React from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { useAuth } from '../../contexts/AuthContext';
+import { useTeams } from '../../hooks/useTeams';
+import { useCostCenters } from '../../hooks/useCostCenters';
+import { Input } from '../ui/Input';
+import { Label } from '../ui/Label';
+import { Button } from '../ui/Button';
+import { Select } from '../ui/Select';
+import { priorityLabels } from '../../utils/ticket';
+import { TicketPriority } from '../../types/database.types';
+
+const ticketSchema = z.object({
+  title: z.string().min(3, 'Título obrigatório (mínimo 3 caracteres)'),
+  description: z.string().optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
+  category: z.string().optional(),
+  team_id: z.string().optional(),
+  cost_center_id: z.string().optional(),
+});
+
+type TicketFormValues = z.infer<typeof ticketSchema>;
+
+interface CreateTicketFormProps {
+  onSubmit: (data: TicketFormValues) => Promise<void>;
+  isLoading: boolean;
+  onCancel: () => void;
+}
+
+const priorityOptions = (Object.entries(priorityLabels) as [TicketPriority, string][]).map(
+  ([v, l]) => ({ value: v, label: l })
+);
+
+const categoryOptions = [
+  { value: 'Elétrica', label: 'Elétrica' },
+  { value: 'Hidráulica', label: 'Hidráulica' },
+  { value: 'Civil', label: 'Civil' },
+  { value: 'Climatização', label: 'Climatização (AC/Ventilação)' },
+  { value: 'Tecnologia', label: 'Tecnologia / TI' },
+  { value: 'Segurança', label: 'Segurança Patrimonial' },
+  { value: 'Limpeza', label: 'Limpeza / Conservação' },
+  { value: 'Jardinagem', label: 'Jardinagem' },
+  { value: 'Outros', label: 'Outros' },
+];
+
+export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
+  onSubmit,
+  isLoading,
+  onCancel,
+}) => {
+  const { profile } = useAuth();
+  const { data: teams = [] } = useTeams(profile?.institution_id ?? undefined);
+  const { data: costCenters = [] } = useCostCenters(profile?.institution_id ?? undefined);
+
+  const { register, handleSubmit, formState: { errors } } = useForm<TicketFormValues>({
+    resolver: zodResolver(ticketSchema),
+    defaultValues: { priority: 'MEDIUM' },
+  });
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <div>
+        <Label htmlFor="title">Título do Chamado *</Label>
+        <div className="mt-1">
+          <Input
+            id="title"
+            placeholder="Descreva brevemente o problema..."
+            error={errors.title?.message}
+            {...register('title')}
+          />
+        </div>
+      </div>
+
+      <div>
+        <Label htmlFor="description">Descrição Detalhada</Label>
+        <div className="mt-1">
+          <textarea
+            id="description"
+            rows={4}
+            placeholder="Descreva com detalhes o problema, localização, urgência..."
+            className="flex w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+            {...register('description')}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="priority">Prioridade *</Label>
+          <div className="mt-1">
+            <Select
+              id="priority"
+              options={priorityOptions}
+              {...register('priority')}
+            />
+          </div>
+        </div>
+        <div>
+          <Label htmlFor="category">Categoria</Label>
+          <div className="mt-1">
+            <Select
+              id="category"
+              placeholder="Selecione..."
+              options={categoryOptions}
+              {...register('category')}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="team_id">Equipe</Label>
+          <div className="mt-1">
+            <Select
+              id="team_id"
+              placeholder="Sem equipe específica"
+              options={teams.map((t) => ({ value: t.id, label: t.name }))}
+              {...register('team_id')}
+            />
+          </div>
+        </div>
+        <div>
+          <Label htmlFor="cost_center_id">Centro de Custo</Label>
+          <div className="mt-1">
+            <Select
+              id="cost_center_id"
+              placeholder="Sem centro de custo"
+              options={costCenters.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` }))}
+              {...register('cost_center_id')}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+        <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
+          Cancelar
+        </Button>
+        <Button type="submit" isLoading={isLoading}>
+          Abrir Chamado
+        </Button>
+      </div>
+    </form>
+  );
+};
