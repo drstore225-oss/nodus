@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  RefreshControl, ActivityIndicator, TextInput,
+  RefreshControl, ActivityIndicator, TextInput, ScrollView,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { useMyTickets, MobileTicket, TicketStatus, TicketPriority } from '../../src/hooks/useTickets';
+import { useMyTickets, MobileTicket, TicketStatus, TicketPriority, TicketType } from '../../src/hooks/useTickets';
 
 const STATUS_COLORS: Record<TicketStatus, { bg: string; text: string; label: string }> = {
   OPEN: { bg: '#dbeafe', text: '#1d4ed8', label: 'Aberto' },
@@ -22,6 +22,13 @@ const PRIORITY_COLORS: Record<TicketPriority, { dot: string; label: string }> = 
   LOW: { dot: '#94a3b8', label: 'Baixa' },
 };
 
+function formatDateShort(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  return new Date(dateStr).toLocaleDateString('pt-BR', {
+    day: '2-digit', month: '2-digit',
+  });
+}
+
 function getSLARemaining(deadline: string | null | undefined): string {
   if (!deadline) return '';
   const now = new Date();
@@ -36,9 +43,11 @@ function getSLARemaining(deadline: string | null | undefined): string {
 function TicketListItem({ ticket }: { ticket: MobileTicket }) {
   const status = STATUS_COLORS[ticket.status];
   const priority = PRIORITY_COLORS[ticket.priority];
-  const sla = getSLARemaining(ticket.deadline_at);
-  const slaExpired = ticket.sla_breached || sla === 'SLA Expirado';
+  const isPreventive = ticket.ticket_type === 'PREVENTIVE';
   const isActive = ticket.status === 'OPEN' || ticket.status === 'IN_PROGRESS';
+  const hasPeriod = ticket.scheduled_at && ticket.deadline_at;
+  const sla = !isPreventive ? getSLARemaining(ticket.deadline_at) : '';
+  const slaExpired = !isPreventive && (ticket.sla_breached || sla === 'SLA Expirado');
 
   return (
     <TouchableOpacity
@@ -48,10 +57,26 @@ function TicketListItem({ ticket }: { ticket: MobileTicket }) {
     >
       <View style={styles.cardHeader}>
         <Text style={styles.cardTitle} numberOfLines={2}>{ticket.title}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
-          <Text style={[styles.statusText, { color: status.text }]}>{status.label}</Text>
+        <View style={{ alignItems: 'flex-end', gap: 4 }}>
+          <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
+            <Text style={[styles.statusText, { color: status.text }]}>{status.label}</Text>
+          </View>
+          {isPreventive && (
+            <View style={styles.prevBadge}>
+              <Text style={styles.prevBadgeText}>PREV</Text>
+            </View>
+          )}
         </View>
       </View>
+
+      {hasPeriod && (
+        <View style={styles.periodRow}>
+          <Ionicons name="calendar-outline" size={12} color="#7c3aed" />
+          <Text style={styles.periodText}>
+            {formatDateShort(ticket.scheduled_at)} → {formatDateShort(ticket.deadline_at)}
+          </Text>
+        </View>
+      )}
 
       {ticket.description && (
         <Text style={styles.cardDesc} numberOfLines={2}>{ticket.description}</Text>
@@ -68,16 +93,18 @@ function TicketListItem({ ticket }: { ticket: MobileTicket }) {
           )}
         </View>
 
-        {isActive && sla && (
-          <View style={[styles.slaTag, slaExpired && styles.slaTagExpired]}>
-            <Ionicons
-              name={slaExpired ? 'warning-outline' : 'time-outline'}
-              size={11}
-              color={slaExpired ? '#dc2626' : '#64748b'}
-            />
-            <Text style={[styles.slaText, slaExpired && styles.slaTextExpired]}>{sla}</Text>
-          </View>
-        )}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {isActive && sla && (
+            <View style={[styles.slaTag, slaExpired && styles.slaTagExpired]}>
+              <Ionicons
+                name={slaExpired ? 'warning-outline' : 'time-outline'}
+                size={11}
+                color={slaExpired ? '#dc2626' : '#64748b'}
+              />
+              <Text style={[styles.slaText, slaExpired && styles.slaTextExpired]}>{sla}</Text>
+            </View>
+          )}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -88,16 +115,24 @@ export default function TicketsScreen() {
   const { data: tickets = [], isLoading, refetch, isFetching } = useMyTickets(user?.id);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<TicketStatus | ''>('');
+  const [typeFilter, setTypeFilter] = useState<TicketType | ''>('');
 
-  const FILTERS: { value: TicketStatus | ''; label: string }[] = [
+  const STATUS_FILTERS: { value: TicketStatus | ''; label: string }[] = [
     { value: '', label: 'Todos' },
     { value: 'OPEN', label: 'Abertos' },
-    { value: 'IN_PROGRESS', label: 'Em Andamento' },
+    { value: 'IN_PROGRESS', label: 'Andamento' },
     { value: 'RESOLVED', label: 'Resolvidos' },
+  ];
+
+  const TYPE_FILTERS: { value: TicketType | ''; label: string; icon: string }[] = [
+    { value: '', label: 'Todos tipos', icon: 'apps-outline' },
+    { value: 'CORRECTIVE', label: 'Corretivos', icon: 'build-outline' },
+    { value: 'PREVENTIVE', label: 'Preventivos', icon: 'shield-checkmark-outline' },
   ];
 
   const filtered = tickets
     .filter((t) => !statusFilter || t.status === statusFilter)
+    .filter((t) => !typeFilter || t.ticket_type === typeFilter)
     .filter(
       (t) =>
         !search ||
@@ -105,8 +140,31 @@ export default function TicketsScreen() {
         (t.description || '').toLowerCase().includes(search.toLowerCase())
     );
 
+  const openCount = tickets.filter((t) => t.status === 'OPEN').length;
+  const pendingChecklists = tickets.filter(
+    (t) => (t.ticket_checklists || []).some((c) => !c.is_completed)
+  ).length;
+
   return (
     <View style={styles.container}>
+      {/* Stats Bar */}
+      {(openCount > 0 || inProgressCount > 0) && (
+        <View style={styles.statsBar}>
+          {openCount > 0 && (
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{openCount}</Text>
+              <Text style={styles.statLabel}>Abertos</Text>
+            </View>
+          )}
+          {inProgressCount > 0 && (
+            <View style={[styles.statItem, { backgroundColor: '#fef9c3', borderColor: '#fde047' }]}>
+              <Text style={[styles.statNumber, { color: '#ca8a04' }]}>{inProgressCount}</Text>
+              <Text style={[styles.statLabel, { color: '#a16207' }]}>Em andamento</Text>
+            </View>
+          )}
+        </View>
+      )}
+
       {/* Search */}
       <View style={styles.searchContainer}>
         <Ionicons name="search-outline" size={16} color="#94a3b8" style={styles.searchIcon} />
@@ -117,11 +175,36 @@ export default function TicketsScreen() {
           value={search}
           onChangeText={setSearch}
         />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch('')}>
+            <Ionicons name="close-circle" size={16} color="#94a3b8" />
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Filter Pills */}
+      {/* Type Filter */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.typeFiltersScroll} contentContainerStyle={styles.typeFiltersRow}>
+        {TYPE_FILTERS.map((f) => (
+          <TouchableOpacity
+            key={f.value}
+            style={[styles.typeFilterChip, typeFilter === f.value && styles.typeFilterChipActive]}
+            onPress={() => setTypeFilter(f.value)}
+          >
+            <Ionicons
+              name={f.icon as any}
+              size={14}
+              color={typeFilter === f.value ? '#fff' : '#64748b'}
+            />
+            <Text style={[styles.typeFilterText, typeFilter === f.value && styles.typeFilterTextActive]}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {/* Status Filter Pills */}
       <View style={styles.filtersRow}>
-        {FILTERS.map((f) => (
+        {STATUS_FILTERS.map((f) => (
           <TouchableOpacity
             key={f.value}
             style={[styles.filterPill, statusFilter === f.value && styles.filterPillActive]}
@@ -144,7 +227,7 @@ export default function TicketsScreen() {
           <Ionicons name="clipboard-outline" size={56} color="#cbd5e1" />
           <Text style={styles.emptyTitle}>Nenhum chamado encontrado</Text>
           <Text style={styles.emptySubtitle}>
-            {search || statusFilter ? 'Tente ajustar os filtros.' : 'Você não possui chamados atribuídos.'}
+            {search || statusFilter || typeFilter ? 'Tente ajustar os filtros.' : 'Você não possui chamados atribuídos.'}
           </Text>
         </View>
       ) : (
@@ -174,15 +257,38 @@ export default function TicketsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
+  statsBar: {
+    flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4,
+  },
+  statItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#eff6ff', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6,
+    borderWidth: 1, borderColor: '#bfdbfe',
+  },
+  statItemWarning: { backgroundColor: '#fff7ed', borderColor: '#fed7aa' },
+  statNumber: { fontSize: 16, fontWeight: '800', color: '#2563eb' },
+  statNumberWarning: { color: '#ea580c' },
+  statLabel: { fontSize: 12, color: '#3b82f6', fontWeight: '600' },
+  statLabelWarning: { color: '#ea580c' },
   searchContainer: {
     flexDirection: 'row', alignItems: 'center',
-    margin: 16, marginBottom: 8,
+    marginHorizontal: 16, marginTop: 8, marginBottom: 4,
     backgroundColor: '#fff', borderRadius: 12,
     borderWidth: 1.5, borderColor: '#e2e8f0', paddingHorizontal: 12,
   },
   searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, height: 44, fontSize: 14, color: '#0f172a' },
-  filtersRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 12 },
+  typeFiltersScroll: { maxHeight: 44 },
+  typeFiltersRow: { paddingHorizontal: 16, paddingVertical: 6, gap: 8 },
+  typeFilterChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
+    backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0',
+  },
+  typeFilterChipActive: { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
+  typeFilterText: { fontSize: 12, color: '#64748b', fontWeight: '600' },
+  typeFilterTextActive: { color: '#fff' },
+  filtersRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 8 },
   filterPill: {
     paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
     backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e2e8f0',
@@ -190,7 +296,7 @@ const styles = StyleSheet.create({
   filterPillActive: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
   filterText: { fontSize: 13, color: '#64748b', fontWeight: '500' },
   filterTextActive: { color: '#fff' },
-  list: { paddingHorizontal: 16, paddingBottom: 24 },
+  list: { paddingHorizontal: 16, paddingBottom: 100 },
   card: {
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
     borderWidth: 1.5, borderColor: '#e2e8f0',
@@ -202,6 +308,10 @@ const styles = StyleSheet.create({
   cardTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: '#0f172a', lineHeight: 20 },
   statusBadge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3, flexShrink: 0 },
   statusText: { fontSize: 11, fontWeight: '600' },
+  prevBadge: { backgroundColor: '#f3e8ff', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  prevBadgeText: { fontSize: 9, fontWeight: '800', color: '#7c3aed', letterSpacing: 0.5 },
+  periodRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
+  periodText: { fontSize: 12, color: '#7c3aed', fontWeight: '600' },
   cardDesc: { fontSize: 13, color: '#64748b', marginBottom: 10, lineHeight: 18 },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   priorityRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
@@ -211,6 +321,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1f5f9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2,
   },
   categoryText: { fontSize: 11, color: '#64748b' },
+  checklistBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  checklistBadgeText: { fontSize: 11, color: '#94a3b8', fontWeight: '600' },
+  checklistBadgeTextDone: { color: '#059669' },
   slaTag: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   slaTagExpired: {},
   slaText: { fontSize: 11, color: '#64748b', fontWeight: '500' },

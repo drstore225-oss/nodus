@@ -11,8 +11,8 @@ export default function TabLayout() {
           backgroundColor: '#fff',
           borderTopColor: '#e2e8f0',
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
+          height: 64,
+          paddingBottom: 10,
         },
         headerStyle: { backgroundColor: '#2563eb' },
         headerTintColor: '#fff',
@@ -25,6 +25,15 @@ export default function TabLayout() {
           title: 'Meus Chamados',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="clipboard-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="explore"
+        options={{
+          title: 'Agenda',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="today-outline" size={size} color={color} />
           ),
         }}
       />

@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, Image,
+  Alert, ActivityIndicator, Image, TextInput,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../../src/lib/supabase';
 import { useAuth } from '../../src/contexts/AuthContext';
-import { useTicketById, useUpdateTicketStatus, TicketStatus } from '../../src/hooks/useTickets';
+import { useTicketById, useUpdateTicketStatus, useUpdateChecklistItem, TicketStatus } from '../../src/hooks/useTickets';
 
 const STATUS_CONFIG: Record<TicketStatus, { label: string; color: string; bg: string }> = {
   OPEN: { label: 'Aberto', color: '#1d4ed8', bg: '#dbeafe' },
@@ -39,11 +39,19 @@ function formatDate(dateStr: string | null | undefined): string {
   });
 }
 
+function formatDateShort(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
+  return new Date(dateStr).toLocaleDateString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+  });
+}
+
 export default function TicketDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user, profile } = useAuth();
   const { data: ticket, isLoading } = useTicketById(id);
   const updateStatus = useUpdateTicketStatus();
+  const updateChecklist = useUpdateChecklistItem();
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
 
@@ -58,6 +66,11 @@ export default function TicketDetailScreen() {
   const status = STATUS_CONFIG[ticket.status];
   const nextStatuses = STATUS_TRANSITIONS[ticket.status];
   const isActive = ticket.status === 'OPEN' || ticket.status === 'IN_PROGRESS';
+  const isPreventive = ticket.ticket_type === 'PREVENTIVE';
+  const hasPeriod = ticket.scheduled_at && ticket.deadline_at;
+  const checklists = ticket.ticket_checklists || [];
+  const doneCount = checklists.filter((c) => c.is_completed).length;
+  const canModify = ['GESTOR', 'ADMIN', 'SUPERADMIN', 'TECNICO'].includes(profile?.role || '');
 
   const handleStatusChange = async (newStatus: TicketStatus) => {
     if (newStatus === 'RESOLVED' && !ticket.assigned_to) {
@@ -81,66 +94,32 @@ export default function TicketDetailScreen() {
     );
   };
 
-  const handleUploadPhoto = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permissão necessária', 'Permita o acesso à galeria de fotos para enviar anexos.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
-    });
-
-    if (result.canceled || !result.assets[0]) return;
-
-    setUploadingPhoto(true);
-    try {
-      const asset = result.assets[0];
-      const fileName = `${ticket.id}/${Date.now()}.jpg`;
-      const response = await fetch(asset.uri);
-      const blob = await response.blob();
-
-      const { error: uploadError } = await supabase.storage
-        .from('attachments')
-        .upload(fileName, blob, { contentType: 'image/jpeg' });
-
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage
-        .from('attachments')
-        .getPublicUrl(fileName);
-
-      const publicUrl = urlData.publicUrl;
-
-      // Salvar na tabela attachments
-      await supabase.from('attachments').insert({
-        ticket_id: ticket.id,
-        file_url: publicUrl,
-      });
-
-      setUploadedUrls((prev) => [...prev, publicUrl]);
-      Alert.alert('Sucesso', 'Foto enviada com sucesso!');
-    } catch (err: any) {
-      Alert.alert('Erro', 'Falha ao enviar a foto: ' + err.message);
-    } finally {
-      setUploadingPhoto(false);
-    }
+  const handleToggleChecklist = (chkId: string, currentValue: boolean) => {
+    updateChecklist.mutate({ id: chkId, is_completed: !currentValue });
   };
 
-  const handleTakePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permissão necessária', 'Permita o acesso à câmera para tirar fotos.');
-      return;
+  const handleUploadPhoto = async (fromCamera: boolean) => {
+    if (fromCamera) {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permissão necessária', 'Permita o acesso à câmera para tirar fotos.');
+        return;
+      }
+    } else {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permissão necessária', 'Permita o acesso à galeria de fotos para enviar anexos.');
+        return;
+      }
     }
 
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      quality: 0.8,
-    });
+    const result = fromCamera
+      ? await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 })
+      : await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          quality: 0.8,
+        });
 
     if (result.canceled || !result.assets[0]) return;
 
@@ -177,8 +156,8 @@ export default function TicketDetailScreen() {
 
   const showPhotoOptions = () => {
     Alert.alert('Adicionar Foto', 'Escolha a origem da foto:', [
-      { text: 'Câmera', onPress: handleTakePhoto },
-      { text: 'Galeria', onPress: handleUploadPhoto },
+      { text: 'Câmera', onPress: () => handleUploadPhoto(true) },
+      { text: 'Galeria', onPress: () => handleUploadPhoto(false) },
       { text: 'Cancelar', style: 'cancel' },
     ]);
   };
@@ -186,7 +165,7 @@ export default function TicketDetailScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Status / Priority Header */}
+        {/* Status / Priority / Type Header */}
         <View style={styles.badgesRow}>
           <View style={[styles.badge, { backgroundColor: status.bg }]}>
             <Text style={[styles.badgeText, { color: status.color }]}>{status.label}</Text>
@@ -197,16 +176,42 @@ export default function TicketDetailScreen() {
               {ticket.priority === 'CRITICAL' ? 'Crítica' : ticket.priority === 'HIGH' ? 'Alta' : ticket.priority === 'MEDIUM' ? 'Média' : 'Baixa'}
             </Text>
           </View>
+          {isPreventive && (
+            <View style={[styles.badge, { backgroundColor: '#f3e8ff' }]}>
+              <Text style={[styles.badgeText, { color: '#7c3aed' }]}>🛡 Preventiva</Text>
+            </View>
+          )}
         </View>
 
         {/* Title */}
         <Text style={styles.title}>{ticket.title}</Text>
+
+        {/* Period Banner */}
+        {hasPeriod && (
+          <View style={styles.periodBanner}>
+            <Ionicons name="calendar-outline" size={16} color="#7c3aed" />
+            <Text style={styles.periodBannerText}>
+              Período: {formatDateShort(ticket.scheduled_at)} → {formatDateShort(ticket.deadline_at)}
+            </Text>
+          </View>
+        )}
 
         {/* Description */}
         {ticket.description && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>DESCRIÇÃO</Text>
             <Text style={styles.description}>{ticket.description}</Text>
+          </View>
+        )}
+
+        {/* Public Observation */}
+        {ticket.public_observation && (
+          <View style={styles.observationCard}>
+            <View style={styles.observationHeader}>
+              <Ionicons name="chatbubble-ellipses-outline" size={16} color="#2563eb" />
+              <Text style={styles.observationTitle}>Atualização do Técnico</Text>
+            </View>
+            <Text style={styles.observationText}>{ticket.public_observation}</Text>
           </View>
         )}
 
@@ -229,7 +234,8 @@ export default function TicketDetailScreen() {
             { icon: 'people-outline', label: 'Equipe', value: (ticket.team as any)?.name },
             { icon: 'pricetag-outline', label: 'Categoria', value: ticket.category },
             { icon: 'calendar-outline', label: 'Criado em', value: formatDate(ticket.created_at) },
-            { icon: 'time-outline', label: 'Prazo (SLA)', value: formatDate(ticket.deadline_at) },
+            { icon: 'play-outline', label: 'Início', value: hasPeriod ? formatDateShort(ticket.scheduled_at) : null },
+            { icon: 'flag-outline', label: 'Término / Prazo', value: hasPeriod ? formatDateShort(ticket.deadline_at) : ticket.deadline_at ? formatDate(ticket.deadline_at) : null },
           ].map((item) => (
             item.value ? (
               <View key={item.label} style={styles.metaRow}>
@@ -240,6 +246,57 @@ export default function TicketDetailScreen() {
             ) : null
           ))}
         </View>
+
+        {/* Checklist Section */}
+        {checklists.length > 0 && (
+          <View style={styles.card}>
+            <View style={styles.checklistHeader}>
+              <Text style={styles.sectionLabel}>CHECKLIST</Text>
+              <View style={styles.checklistProgress}>
+                <Text style={[styles.checklistProgressText, doneCount === checklists.length && styles.checklistProgressTextDone]}>
+                  {doneCount}/{checklists.length} concluídos
+                </Text>
+              </View>
+            </View>
+
+            {/* Progress bar */}
+            <View style={styles.progressBarBg}>
+              <View style={[
+                styles.progressBarFill,
+                {
+                  width: `${checklists.length > 0 ? (doneCount / checklists.length) * 100 : 0}%` as any,
+                  backgroundColor: doneCount === checklists.length ? '#059669' : '#2563eb',
+                }
+              ]} />
+            </View>
+
+            <View style={styles.checklistItems}>
+              {checklists.map((chk) => (
+                <TouchableOpacity
+                  key={chk.id}
+                  style={[styles.checklistItem, chk.is_completed && styles.checklistItemDone]}
+                  onPress={() => handleToggleChecklist(chk.id, chk.is_completed)}
+                  disabled={updateChecklist.isPending}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.checklistCircle, chk.is_completed && styles.checklistCircleDone]}>
+                    {chk.is_completed && <Ionicons name="checkmark" size={14} color="#fff" />}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.checklistText, chk.is_completed && styles.checklistTextDone]}>
+                      {chk.item_text}
+                    </Text>
+                    {chk.is_completed && chk.profiles?.email && (
+                      <Text style={styles.checklistCompletedBy}>
+                        por {chk.profiles.email.split('@')[0]}
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Upload Section */}
         <View style={styles.card}>
@@ -260,7 +317,6 @@ export default function TicketDetailScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Preview de fotos uploadadas nesta sessão */}
           {uploadedUrls.length > 0 && (
             <View style={styles.photosGrid}>
               {uploadedUrls.map((url, i) => (
@@ -313,14 +369,27 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   scroll: { padding: 16, paddingBottom: 40 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  badgesRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  badgesRow: { flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' },
   badge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
   badgeText: { fontSize: 12, fontWeight: '700' },
   badgeTextGray: { fontSize: 12, fontWeight: '600', color: '#475569' },
-  title: { fontSize: 22, fontWeight: '800', color: '#0f172a', lineHeight: 28, marginBottom: 16 },
+  title: { fontSize: 22, fontWeight: '800', color: '#0f172a', lineHeight: 28, marginBottom: 12 },
+  periodBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#f3e8ff', borderRadius: 10, padding: 10, marginBottom: 12,
+    borderWidth: 1, borderColor: '#ddd6fe',
+  },
+  periodBannerText: { fontSize: 13, color: '#7c3aed', fontWeight: '700' },
   section: { marginBottom: 16 },
   sectionLabel: { fontSize: 11, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
   description: { fontSize: 14, color: '#475569', lineHeight: 22 },
+  observationCard: {
+    backgroundColor: '#eff6ff', borderRadius: 12, padding: 14,
+    borderWidth: 1, borderColor: '#bfdbfe', marginBottom: 12,
+  },
+  observationHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  observationTitle: { fontSize: 13, fontWeight: '700', color: '#2563eb' },
+  observationText: { fontSize: 14, color: '#1e40af', lineHeight: 20 },
   slaAlert: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 10,
     backgroundColor: '#fef2f2', borderRadius: 12, padding: 14,
@@ -335,6 +404,31 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 7, gap: 10 },
   metaLabel: { width: 90, fontSize: 13, color: '#94a3b8', fontWeight: '500' },
   metaValue: { flex: 1, fontSize: 13, color: '#334155', fontWeight: '600', textAlign: 'right' },
+  // Checklist
+  checklistHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  checklistProgress: {},
+  checklistProgressText: { fontSize: 12, color: '#94a3b8', fontWeight: '600' },
+  checklistProgressTextDone: { color: '#059669' },
+  progressBarBg: { height: 4, backgroundColor: '#e2e8f0', borderRadius: 2, marginBottom: 12 },
+  progressBarFill: { height: 4, borderRadius: 2 },
+  checklistItems: { gap: 8 },
+  checklistItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: 12, borderRadius: 10, backgroundColor: '#f8fafc',
+    borderWidth: 1, borderColor: '#e2e8f0',
+  },
+  checklistItemDone: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  checklistCircle: {
+    width: 24, height: 24, borderRadius: 12,
+    borderWidth: 2, borderColor: '#cbd5e1',
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  checklistCircleDone: { backgroundColor: '#059669', borderColor: '#059669' },
+  checklistText: { fontSize: 14, color: '#334155', fontWeight: '500' },
+  checklistTextDone: { color: '#94a3b8', textDecorationLine: 'line-through' },
+  checklistCompletedBy: { fontSize: 11, color: '#86efac', marginTop: 2 },
+  // Upload
   uploadButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     borderWidth: 2, borderColor: '#bfdbfe', borderStyle: 'dashed',
@@ -343,6 +437,7 @@ const styles = StyleSheet.create({
   uploadText: { fontSize: 14, color: '#2563eb', fontWeight: '600' },
   photosGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   photoThumb: { width: 80, height: 80, borderRadius: 8, backgroundColor: '#e2e8f0' },
+  // Actions
   actionsBar: {
     backgroundColor: '#fff', padding: 16, gap: 8,
     borderTopWidth: 1, borderTopColor: '#e2e8f0',

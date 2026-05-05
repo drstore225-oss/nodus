@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Outlet, Navigate, useLocation, NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 import { Button } from '../ui/Button';
 import {
   LogOut,
@@ -13,11 +14,13 @@ import {
   Menu,
   X,
   ChevronRight,
+  Clock,
+  Activity,
   Layers,
 } from 'lucide-react';
 
 export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { session, isLoading } = useAuth();
+  const { session, isLoading, profile } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -30,6 +33,27 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ childr
 
   if (!session) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Se logou, mas não é SuperAdmin e não tem instituição, está pendente de aprovação
+  if (profile && profile.role !== 'SUPERADMIN' && !profile.institution_id) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Clock className="h-8 w-8 text-blue-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-800 mb-2">Aguardando Aprovação</h1>
+          <p className="text-slate-600 mb-8">
+            Seu cadastro foi realizado com sucesso, mas o seu acesso ainda não foi liberado. 
+            Um Super Administrador precisa aprovar sua conta e vincular à sua empresa.
+          </p>
+          <Button onClick={() => supabase.auth.signOut()} variant="outline" className="w-full">
+            Sair e voltar depois
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return <>{children}</>;
@@ -46,6 +70,7 @@ const navItems: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/chamados', label: 'Chamados', icon: Ticket },
   { to: '/institucoes', label: 'Instituições', icon: Building2, roles: ['SUPERADMIN', 'ADMIN'] },
+  { to: '/planos-manutencao', label: 'Rotinas', icon: Activity, roles: ['SUPERADMIN', 'ADMIN', 'GESTOR'] },
   { to: '/equipes', label: 'Equipes', icon: UsersRound, roles: ['SUPERADMIN', 'ADMIN', 'GESTOR'] },
   { to: '/usuarios', label: 'Usuários', icon: Users, roles: ['SUPERADMIN', 'ADMIN'] },
   { to: '/centros-custo', label: 'Centros de Custo', icon: Layers, roles: ['SUPERADMIN', 'ADMIN', 'GESTOR'] },

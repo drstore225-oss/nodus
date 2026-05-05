@@ -2,18 +2,25 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { TicketStatus, TicketPriority } from '../types/database.types';
 
+export type TicketType = 'CORRECTIVE' | 'PREVENTIVE';
+
 export interface Ticket {
   id: string;
   institution_id: string;
   title: string;
   description: string | null;
+  ticket_type: TicketType;
   status: TicketStatus;
   priority: TicketPriority;
   category: string | null;
-  user_id: string;
+  user_id: string | null;
+  requester_name: string | null;
+  requester_email: string | null;
+  public_observation: string | null;
   assigned_to: string | null;
   team_id: string | null;
   cost_center_id: string | null;
+  scheduled_at: string | null;
   deadline_at: string | null;
   resolved_at: string | null;
   sla_breached: boolean;
@@ -30,16 +37,19 @@ export interface Ticket {
   cost_center?: { name: string; code: string } | null;
   attachments?: { id: string; file_url: string; created_at: string }[];
   ticket_logs?: { id: string; action: string; created_at: string; profiles?: { email: string } | null }[];
+  ticket_checklists?: { id: string; item_text: string; is_completed: boolean; completed_at: string | null; completed_by: string | null; profiles?: { email: string } | null }[];
 }
 
 export type TicketInsert = Pick<
   Ticket,
-  'institution_id' | 'title' | 'description' | 'priority' | 'category' | 'user_id' | 'team_id' | 'cost_center_id'
+  'institution_id' | 'title' | 'description' | 'ticket_type' | 'priority' | 'category' | 'user_id' | 'team_id' | 'cost_center_id' | 'requester_name' | 'requester_email' | 'public_observation' | 'scheduled_at' | 'deadline_at'
 >;
 
 export type TicketFilters = {
   status?: TicketStatus;
   priority?: TicketPriority;
+  ticketType?: TicketType;
+  assigneeId?: string;
   slaBreached?: boolean;
   search?: string;
 };
@@ -61,6 +71,8 @@ export function useTickets(filters?: TicketFilters) {
 
       if (filters?.status) query = query.eq('status', filters.status);
       if (filters?.priority) query = query.eq('priority', filters.priority);
+      if (filters?.ticketType) query = query.eq('ticket_type', filters.ticketType);
+      if (filters?.assigneeId) query = query.eq('assigned_to', filters.assigneeId);
       if (filters?.slaBreached !== undefined) query = query.eq('sla_breached', filters.slaBreached);
       if (filters?.search) {
         query = query.or(`title.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
@@ -86,7 +98,8 @@ export function useTicket(id: string) {
           team:teams(name),
           cost_center:cost_centers(name, code),
           attachments(id, file_url, created_at),
-          ticket_logs(id, action, created_at, profiles(email))
+          ticket_logs(id, action, created_at, profiles(email)),
+          ticket_checklists(id, item_text, is_completed, completed_at, completed_by, profiles!ticket_checklists_completed_by_fkey(email))
         `)
         .eq('id', id)
         .single();
@@ -210,6 +223,26 @@ export function useUpdateTicket() {
       const { error } = await supabase
         .from('tickets')
         .update(data)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets'] });
+    },
+  });
+}
+
+export function useUpdateChecklistItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, is_completed }: { id: string; is_completed: boolean }) => {
+      const { error } = await supabase
+        .from('ticket_checklists')
+        .update({ 
+          is_completed, 
+          completed_at: is_completed ? new Date().toISOString() : null,
+          completed_by: is_completed ? (await supabase.auth.getUser()).data.user?.id : null
+        })
         .eq('id', id);
       if (error) throw error;
     },

@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { useTickets, useCreateTicket, TicketFilters } from '../../hooks/useTickets';
 import { useAuth } from '../../contexts/AuthContext';
+import { useUsers } from '../../hooks/useUsers';
 import { TicketStatus, TicketPriority } from '../../types/database.types';
+import { TicketType } from '../../hooks/useTickets';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { TicketCard } from '../../components/tickets/TicketCard';
 import { CreateTicketForm } from '../../components/tickets/CreateTicketForm';
 import { TicketDetailPanel } from '../../components/tickets/TicketDetailPanel';
+import { TicketsCalendar } from '../../components/tickets/TicketsCalendar';
 import { statusLabels, priorityLabels } from '../../utils/ticket';
-import { Plus, Search, SlidersHorizontal, Ticket as TicketIcon, AlertTriangle } from 'lucide-react';
+import { Plus, Search, SlidersHorizontal, Ticket as TicketIcon, AlertTriangle, List, Calendar as CalendarIcon } from 'lucide-react';
 
 const STATUS_OPTIONS: { value: TicketStatus | ''; label: string }[] = [
   { value: '', label: 'Todos os Status' },
@@ -26,18 +29,32 @@ const PRIORITY_OPTIONS: { value: TicketPriority | ''; label: string }[] = [
   { value: 'LOW', label: 'Baixa' },
 ];
 
+const TYPE_OPTIONS: { value: TicketType | ''; label: string }[] = [
+  { value: '', label: 'Todos os Tipos' },
+  { value: 'CORRECTIVE', label: 'Corretiva' },
+  { value: 'PREVENTIVE', label: 'Preventiva' },
+];
+
 export const TicketsPage: React.FC = () => {
   const { profile, user } = useAuth();
+  const { data: users = [] } = useUsers(profile?.institution_id ?? undefined);
+  
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<TicketStatus | ''>('');
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | ''>('');
+  const [typeFilter, setTypeFilter] = useState<TicketType | ''>('');
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('');
   const [slaFilter, setSlaFilter] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
 
   const filters: TicketFilters = {
     ...(statusFilter ? { status: statusFilter } : {}),
     ...(priorityFilter ? { priority: priorityFilter } : {}),
+    ...(typeFilter ? { ticketType: typeFilter } : {}),
+    ...(assigneeFilter ? { assigneeId: assigneeFilter } : {}),
     ...(slaFilter ? { slaBreached: true } : {}),
     ...(search ? { search } : {}),
   };
@@ -46,7 +63,10 @@ export const TicketsPage: React.FC = () => {
   const createMutation = useCreateTicket();
 
   const handleCreate = async (data: any) => {
-    if (!profile?.institution_id) return;
+    if (!profile?.institution_id) {
+      alert('Você precisa estar vinculado a uma Instituição para abrir chamados. Vá no menu "Usuários" e vincule seu perfil a uma instituição.');
+      return;
+    }
     await createMutation.mutateAsync({
       ...data,
       institution_id: profile.institution_id,
@@ -57,7 +77,8 @@ export const TicketsPage: React.FC = () => {
     setIsCreateOpen(false);
   };
 
-  const activeFiltersCount = [statusFilter, priorityFilter, slaFilter].filter(Boolean).length;
+  const technicianUsers = users.filter((u) => u.role === 'TECNICO' || u.role === 'GESTOR');
+  const activeFiltersCount = [statusFilter, priorityFilter, typeFilter, assigneeFilter, slaFilter].filter(Boolean).length;
 
   return (
     <div className="space-y-6">
@@ -69,10 +90,34 @@ export const TicketsPage: React.FC = () => {
             {isLoading ? '...' : `${tickets.length} chamado${tickets.length !== 1 ? 's' : ''} encontrado${tickets.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Novo Chamado
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* View Toggle */}
+          <div className="bg-slate-100 p-1 rounded-lg flex items-center">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`flex items-center justify-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                viewMode === 'list' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <List className="h-4 w-4 mr-1.5" />
+              Lista
+            </button>
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`flex items-center justify-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                viewMode === 'calendar' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <CalendarIcon className="h-4 w-4 mr-1.5" />
+              Calendário
+            </button>
+          </div>
+          
+          <Button onClick={() => { setSelectedDate(null); setIsCreateOpen(true); }}>
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Chamado
+          </Button>
+        </div>
       </div>
 
       {/* Filters Bar */}
@@ -108,6 +153,29 @@ export const TicketsPage: React.FC = () => {
           ))}
         </select>
 
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value as TicketType | '')}
+          className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          {TYPE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+
+        {['GESTOR', 'ADMIN', 'SUPERADMIN'].includes(profile?.role || '') && (
+          <select
+            value={assigneeFilter}
+            onChange={(e) => setAssigneeFilter(e.target.value)}
+            className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Todos os Técnicos</option>
+            {technicianUsers.map((u) => (
+              <option key={u.id} value={u.id}>{u.email}</option>
+            ))}
+          </select>
+        )}
+
         <button
           onClick={() => setSlaFilter(!slaFilter)}
           className={`flex items-center gap-2 h-10 px-4 rounded-md border text-sm font-medium transition-colors ${
@@ -134,7 +202,7 @@ export const TicketsPage: React.FC = () => {
             {activeFiltersCount > 0 ? 'Tente ajustar os filtros.' : 'Clique em "Novo Chamado" para começar.'}
           </p>
         </div>
-      ) : (
+      ) : viewMode === 'list' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {tickets.map((ticket) => (
             <TicketCard
@@ -144,6 +212,15 @@ export const TicketsPage: React.FC = () => {
             />
           ))}
         </div>
+      ) : (
+        <TicketsCalendar 
+          tickets={tickets} 
+          onTicketClick={setSelectedTicketId} 
+          onDayClick={(date) => {
+            setSelectedDate(date);
+            setIsCreateOpen(true);
+          }}
+        />
       )}
 
       {/* Create Modal */}
@@ -157,6 +234,7 @@ export const TicketsPage: React.FC = () => {
           onSubmit={handleCreate}
           isLoading={createMutation.isPending}
           onCancel={() => setIsCreateOpen(false)}
+          initialDate={selectedDate}
         />
       </Modal>
 

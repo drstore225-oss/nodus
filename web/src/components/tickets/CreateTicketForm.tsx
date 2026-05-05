@@ -16,10 +16,24 @@ const ticketSchema = z.object({
   title: z.string().min(3, 'Título obrigatório (mínimo 3 caracteres)'),
   description: z.string().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
+  ticket_type: z.enum(['CORRECTIVE', 'PREVENTIVE']),
   category: z.string().optional(),
   team_id: z.string().optional(),
   cost_center_id: z.string().optional(),
-});
+  scheduled_at: z.string().optional(),
+  deadline_at: z.string().optional(),
+}).refine(
+  (data) => {
+    if (data.scheduled_at && data.deadline_at) {
+      return new Date(data.deadline_at) >= new Date(data.scheduled_at);
+    }
+    return true;
+  },
+  {
+    message: 'Data Final não pode ser anterior à Data de Início.',
+    path: ['deadline_at'],
+  }
+);
 
 type TicketFormValues = z.infer<typeof ticketSchema>;
 
@@ -27,6 +41,7 @@ interface CreateTicketFormProps {
   onSubmit: (data: TicketFormValues) => Promise<void>;
   isLoading: boolean;
   onCancel: () => void;
+  initialDate?: Date | null;
 }
 
 const priorityOptions = (Object.entries(priorityLabels) as [TicketPriority, string][]).map(
@@ -49,6 +64,7 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
   onSubmit,
   isLoading,
   onCancel,
+  initialDate,
 }) => {
   const { profile } = useAuth();
   const { data: teams = [] } = useTeams(profile?.institution_id ?? undefined);
@@ -56,7 +72,11 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
 
   const { register, handleSubmit, formState: { errors } } = useForm<TicketFormValues>({
     resolver: zodResolver(ticketSchema),
-    defaultValues: { priority: 'MEDIUM' },
+    defaultValues: { 
+      priority: 'MEDIUM',
+      ticket_type: 'CORRECTIVE',
+      scheduled_at: initialDate ? initialDate.toISOString().slice(0, 16) : undefined,
+    },
   });
 
   return (
@@ -98,6 +118,22 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
           </div>
         </div>
         <div>
+          <Label htmlFor="ticket_type">Tipo de Manutenção *</Label>
+          <div className="mt-1">
+            <Select
+              id="ticket_type"
+              options={[
+                { value: 'CORRECTIVE', label: 'Corretiva' },
+                { value: 'PREVENTIVE', label: 'Preventiva' },
+              ]}
+              {...register('ticket_type')}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
           <Label htmlFor="category">Categoria</Label>
           <div className="mt-1">
             <Select
@@ -108,9 +144,31 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
             />
           </div>
         </div>
+        <div>
+          <Label htmlFor="scheduled_at">Data de Início</Label>
+          <div className="mt-1">
+            <Input
+              id="scheduled_at"
+              type="datetime-local"
+              error={errors.scheduled_at?.message}
+              {...register('scheduled_at')}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="deadline_at">Data de Término / Prazo</Label>
+          <div className="mt-1">
+            <Input
+              id="deadline_at"
+              type="datetime-local"
+              error={errors.deadline_at?.message}
+              {...register('deadline_at')}
+            />
+          </div>
+        </div>
         <div>
           <Label htmlFor="team_id">Equipe</Label>
           <div className="mt-1">

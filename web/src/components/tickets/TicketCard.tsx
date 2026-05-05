@@ -65,7 +65,11 @@ export const TicketCard: React.FC<TicketCardProps> = ({ ticket, onClick }) => {
         <div className="flex items-center justify-between text-xs text-slate-400 border-t border-slate-50 pt-3">
           <div className="flex items-center gap-1">
             <User className="h-3 w-3" />
-            <span>{(ticket.requester as any)?.email?.split('@')[0] || '—'}</span>
+            <span className="truncate max-w-[100px]">
+              {ticket.user_id 
+                ? (ticket.requester as any)?.email?.split('@')[0] || '—'
+                : ticket.requester_name?.split(' ')[0] || ticket.requester_email?.split('@')[0] || 'Público'}
+            </span>
           </div>
           <div className="flex items-center gap-3">
             {isActive && ticket.deadline_at && (

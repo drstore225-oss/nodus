@@ -10,13 +10,12 @@ import { UsersPage } from './pages/dashboard/Users';
 import { TeamsPage } from './pages/dashboard/Teams';
 import { CostCentersPage } from './pages/dashboard/CostCenters';
 import { TicketsPage } from './pages/dashboard/Tickets';
+import { SettingsPage } from './pages/dashboard/Settings';
+import { MaintenancePlans } from './pages/dashboard/MaintenancePlans';
+import { PublicTicket } from './pages/public/PublicTicket';
+import { TicketTracking } from './pages/public/TicketTracking';
 
-const ConfigPlaceholder = () => (
-  <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-    <p className="text-2xl font-bold text-slate-300">Configurações</p>
-    <p className="text-slate-400 text-sm mt-2">Em breve...</p>
-  </div>
-);
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,6 +34,9 @@ function App() {
               <Route path="/login" element={<Login />} />
             </Route>
 
+            <Route path="/chamado-publico/:institutionId" element={<PublicTicket />} />
+            <Route path="/acompanhar/:ticketId" element={<TicketTracking />} />
+
             {/* Rotas Privadas */}
             <Route
               path="/"
@@ -46,11 +48,12 @@ function App() {
             >
               <Route index element={<Overview />} />
               <Route path="chamados" element={<TicketsPage />} />
+              <Route path="planos-manutencao" element={<MaintenancePlans />} />
               <Route path="institucoes" element={<Institutions />} />
               <Route path="equipes" element={<TeamsPage />} />
               <Route path="usuarios" element={<UsersPage />} />
               <Route path="centros-custo" element={<CostCentersPage />} />
-              <Route path="configuracoes" element={<ConfigPlaceholder />} />
+              <Route path="configuracoes" element={<SettingsPage />} />
             </Route>
 
             {/* Fallback */}

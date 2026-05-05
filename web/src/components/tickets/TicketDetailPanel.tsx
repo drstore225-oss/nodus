@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useTicket, useUpdateTicket } from '../../hooks/useTickets';
+import { useTicket, useUpdateTicket, useUpdateChecklistItem } from '../../hooks/useTickets';
 import { useUsers } from '../../hooks/useUsers';
+import { useTeams } from '../../hooks/useTeams';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   statusLabels, priorityLabels, statusBadgeClass, priorityBadgeClass,
@@ -11,7 +12,7 @@ import { Select } from '../ui/Select';
 import { TicketStatus } from '../../types/database.types';
 import {
   X, Clock, AlertTriangle, User, Tag, DollarSign, Users, Calendar,
-  CheckCircle, ArrowRight, Paperclip, History, Save,
+  CheckCircle, ArrowRight, Paperclip, History, Save, CheckSquare, Square
 } from 'lucide-react';
 
 interface TicketDetailPanelProps {
@@ -37,9 +38,18 @@ export const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticketId, 
   const { profile } = useAuth();
   const { data: ticket, isLoading } = useTicket(ticketId);
   const { data: users = [] } = useUsers(profile?.institution_id ?? undefined);
+  const { data: teams = [] } = useTeams(profile?.institution_id ?? undefined);
   const updateMutation = useUpdateTicket();
+  const updateChecklistMutation = useUpdateChecklistItem();
   
   const [assigneeId, setAssigneeId] = useState('');
+  const [teamId, setTeamId] = useState('');
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [deadlineAt, setDeadlineAt] = useState('');
+  
+  // Public Observation State
+  const [isEditingObservation, setIsEditingObservation] = useState(false);
+  const [publicObservation, setPublicObservation] = useState('');
   
   // Cost states
   const [isEditingCosts, setIsEditingCosts] = useState(false);
@@ -52,12 +62,15 @@ export const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticketId, 
 
   useEffect(() => {
     if (ticket) {
+      setPublicObservation(ticket.public_observation || '');
       setCosts({
         estimated_cost: ticket.estimated_cost || 0,
         approved_cost: ticket.approved_cost || 0,
         actual_cost: ticket.actual_cost || 0,
         cost_notes: ticket.cost_notes || '',
       });
+      setScheduledAt(ticket.scheduled_at ? new Date(ticket.scheduled_at).toISOString().slice(0, 16) : '');
+      setDeadlineAt(ticket.deadline_at ? new Date(ticket.deadline_at).toISOString().slice(0, 16) : '');
     }
   }, [ticket]);
 
@@ -76,9 +89,31 @@ export const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticketId, 
   };
 
   const handleAssign = async () => {
-    if (!ticket || !assigneeId) return;
-    await updateMutation.mutateAsync({ id: ticket.id, assigned_to: assigneeId });
+    if (!ticket) return;
+    await updateMutation.mutateAsync({ id: ticket.id, assigned_to: assigneeId || null, team_id: teamId || null });
     setAssigneeId('');
+    setTeamId('');
+  };
+
+  const handleUpdateSchedule = async () => {
+    if (!ticket) return;
+    
+    if (scheduledAt && deadlineAt && new Date(deadlineAt) < new Date(scheduledAt)) {
+      alert('A data de término não pode ser anterior à data de início.');
+      return;
+    }
+
+    await updateMutation.mutateAsync({ 
+      id: ticket.id, 
+      scheduled_at: scheduledAt || null,
+      deadline_at: deadlineAt || null,
+    });
+  };
+
+  const handleSaveObservation = async () => {
+    if (!ticket) return;
+    await updateMutation.mutateAsync({ id: ticket.id, public_observation: publicObservation });
+    setIsEditingObservation(false);
   };
 
   const handleSaveCosts = async () => {
@@ -168,7 +203,11 @@ export const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticketId, 
                   <User className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="text-xs text-slate-400 uppercase tracking-wide">Solicitante</p>
-                    <p className="text-slate-700 font-medium">{(ticket.requester as any)?.email || '—'}</p>
+                    <p className="text-slate-700 font-medium">
+                      {ticket.user_id 
+                        ? (ticket.requester as any)?.email || '—'
+                        : `${ticket.requester_name || ''} (${ticket.requester_email || ''})`}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
@@ -221,22 +260,154 @@ export const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticketId, 
 
             {/* Assign Section */}
             {canAssign && ticket.status !== 'RESOLVED' && ticket.status !== 'CANCELED' && (
-              <div className="border border-slate-200 rounded-xl p-5 space-y-3 bg-white">
-                <p className="text-sm font-bold text-slate-700">Atribuir Técnico</p>
-                <div className="flex gap-2">
-                  <Select
-                    className="flex-1"
-                    placeholder="Selecionar técnico..."
-                    value={assigneeId}
-                    onChange={(e) => setAssigneeId(e.target.value)}
-                    options={technicianUsers.map((u) => ({
-                      value: u.id,
-                      label: u.email,
-                    }))}
-                  />
-                  <Button onClick={handleAssign} disabled={!assigneeId} isLoading={updateMutation.isPending}>
-                    Atribuir
+              <div className="border border-slate-200 rounded-xl p-5 space-y-4 bg-white">
+                <p className="text-sm font-bold text-slate-700">Atribuição e Agendamento</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Técnico Individual</label>
+                    <Select
+                      className="w-full"
+                      placeholder="Sem técnico..."
+                      value={assigneeId}
+                      onChange={(e) => setAssigneeId(e.target.value)}
+                      disabled={!!teamId}
+                      options={technicianUsers.map((u) => ({
+                        value: u.id,
+                        label: u.email,
+                      }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Ou Equipe (Múltiplos)</label>
+                    <Select
+                      className="w-full"
+                      placeholder="Sem equipe..."
+                      value={teamId}
+                      onChange={(e) => setTeamId(e.target.value)}
+                      disabled={!!assigneeId}
+                      options={teams.map((t) => ({
+                        value: t.id,
+                        label: t.name,
+                      }))}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end mt-2">
+                  <Button onClick={handleAssign} disabled={(!assigneeId && !teamId)} isLoading={updateMutation.isPending} size="sm">
+                    Salvar Atribuição
                   </Button>
+                </div>
+                
+                <hr className="border-slate-100" />
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Data de Início</label>
+                    <input
+                      type="datetime-local"
+                      className="w-full h-9 rounded-md border border-slate-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={scheduledAt}
+                      onChange={(e) => setScheduledAt(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Data de Término / Prazo</label>
+                    <input
+                      type="datetime-local"
+                      className="w-full h-9 rounded-md border border-slate-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={deadlineAt}
+                      onChange={(e) => setDeadlineAt(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end mt-2">
+                  <Button onClick={handleUpdateSchedule} isLoading={updateMutation.isPending} size="sm">
+                    Salvar Período
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Public Observation Section */}
+            {(canAssign || ticket.assigned_to === profile?.id) && (
+              <div className="border border-slate-200 rounded-xl p-5 bg-white">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Observação Pública (Cliente)
+                  </p>
+                  {!isEditingObservation && (
+                    <Button variant="outline" size="sm" onClick={() => setIsEditingObservation(true)}>
+                      Editar Observação
+                    </Button>
+                  )}
+                </div>
+
+                {isEditingObservation ? (
+                  <div className="space-y-3">
+                    <textarea
+                      className="w-full rounded-md border border-slate-300 p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none h-24"
+                      value={publicObservation}
+                      onChange={(e) => setPublicObservation(e.target.value)}
+                      placeholder="Descreva o que está sendo feito. O solicitante verá esta mensagem..."
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" onClick={() => setIsEditingObservation(false)}>Cancelar</Button>
+                      <Button onClick={handleSaveObservation} isLoading={updateMutation.isPending}>
+                        <Save className="h-4 w-4 mr-2" /> Salvar Observação
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    {ticket.public_observation ? (
+                      <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-4">
+                        <p className="text-sm text-slate-700 whitespace-pre-wrap">{ticket.public_observation}</p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-400 italic">Nenhuma observação pública adicionada.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Checklists Section */}
+            {ticket.ticket_checklists && ticket.ticket_checklists.length > 0 && (
+              <div className="border border-slate-200 rounded-xl p-5 bg-white">
+                <p className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                  <CheckSquare className="h-4 w-4 text-blue-600" />
+                  Checklist Diário / Tarefas
+                </p>
+                <div className="space-y-2">
+                  {ticket.ticket_checklists.map((chk) => (
+                    <div 
+                      key={chk.id} 
+                      className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                        chk.is_completed ? 'bg-emerald-50/50 border-emerald-100' : 'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <button
+                        onClick={() => updateChecklistMutation.mutate({ id: chk.id, is_completed: !chk.is_completed })}
+                        disabled={updateChecklistMutation.isPending || (!canAssign && ticket.assigned_to !== profile?.id)}
+                        className={`mt-0.5 flex-shrink-0 transition-colors ${
+                          chk.is_completed ? 'text-emerald-500 hover:text-emerald-600' : 'text-slate-400 hover:text-blue-500'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        {chk.is_completed ? <CheckSquare className="h-5 w-5" /> : <Square className="h-5 w-5" />}
+                      </button>
+                      <div className="flex-1">
+                        <p className={`text-sm ${chk.is_completed ? 'text-slate-500 line-through' : 'text-slate-700 font-medium'}`}>
+                          {chk.item_text}
+                        </p>
+                        {chk.is_completed && chk.completed_at && (
+                          <p className="text-xs text-slate-400 mt-1">
+                            Concluído por {chk.profiles?.email?.split('@')[0]} em {formatDate(chk.completed_at)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
