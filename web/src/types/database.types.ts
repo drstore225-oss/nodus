@@ -1,6 +1,7 @@
 export type UserRole = 'SOLICITANTE' | 'TECNICO' | 'GESTOR' | 'ADMIN' | 'SUPERADMIN';
 export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CANCELED';
 export type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type NotificationType = 'TICKET_CREATED' | 'TICKET_UPDATED' | 'TICKET_ASSIGNED' | 'SLA_BREACHED' | 'SYSTEM';
 
 export interface Institution {
   id: string;
@@ -26,6 +27,18 @@ export interface Profile {
   created_at: string;
 }
 
+export interface Notification {
+  id: string;
+  institution_id: string;
+  user_id: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  link: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -38,6 +51,11 @@ export interface Database {
         Row: Profile;
         Insert: Omit<Profile, 'id' | 'created_at'>;
         Update: Partial<Omit<Profile, 'id' | 'created_at'>>;
+      };
+      notifications: {
+        Row: Notification;
+        Insert: Omit<Notification, 'id' | 'created_at'>;
+        Update: Partial<Omit<Notification, 'id' | 'created_at'>>;
       };
     };
   };

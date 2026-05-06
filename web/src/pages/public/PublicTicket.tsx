@@ -11,7 +11,7 @@ import { Button } from '../../components/ui/Button';
 import { Select } from '../../components/ui/Select';
 import { priorityLabels } from '../../utils/ticket';
 import type { TicketPriority } from '../../types/database.types';
-import { Ticket, CheckCircle2, AlertCircle, Copy, ArrowRight } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Copy, ArrowRight } from 'lucide-react';
 
 const publicTicketSchema = z.object({
   requester_name: z.string().min(3, 'Nome obrigatório (mínimo 3 caracteres)'),

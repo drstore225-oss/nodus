@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Outlet, Navigate, useLocation, NavLink } from 'react-router-dom';
+import { NotificationBell } from '../notifications/NotificationBell';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../ui/Button';
@@ -189,6 +190,14 @@ export const DashboardLayout: React.FC = () => {
             <img src="/logo.png" alt="Nodus" className="h-6 w-6 object-contain" />
             <span className="font-bold text-slate-800">Nodus</span>
           </div>
+          <div className="ml-auto">
+            <NotificationBell />
+          </div>
+        </header>
+
+        {/* Desktop Top Bar */}
+        <header className="hidden lg:flex bg-white border-b border-slate-200 px-8 py-4 items-center justify-end sticky top-0 z-20">
+          <NotificationBell />
         </header>
 
         {/* Page Content */}

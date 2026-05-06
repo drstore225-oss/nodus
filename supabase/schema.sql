@@ -8,6 +8,7 @@ CREATE TYPE public.ticket_status AS ENUM ('OPEN', 'IN_PROGRESS', 'RESOLVED', 'CA
 CREATE TYPE public.ticket_priority AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
 CREATE TYPE public.ticket_type AS ENUM ('CORRECTIVE', 'PREVENTIVE');
 CREATE TYPE public.maintenance_frequency AS ENUM ('DAILY', 'WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY');
+CREATE TYPE public.notification_type AS ENUM ('TICKET_CREATED', 'TICKET_UPDATED', 'TICKET_ASSIGNED', 'SLA_BREACHED', 'SYSTEM');
 
 -- 2. TABELAS
 
@@ -138,6 +139,18 @@ CREATE TABLE public.maintenance_plan_checklists (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Notificações (Notificações in-app em tempo real)
+CREATE TABLE public.notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    institution_id UUID NOT NULL REFERENCES public.institutions(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    type public.notification_type DEFAULT 'SYSTEM'::public.notification_type NOT NULL,
+    link TEXT,
+    is_read BOOLEAN DEFAULT FALSE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
 
 -- 3. FUNÇÕES E TRIGGERS
 
@@ -251,6 +264,63 @@ CREATE TRIGGER trg_log_ticket_changes
 AFTER INSERT OR UPDATE ON public.tickets
 FOR EACH ROW EXECUTE PROCEDURE public.log_ticket_changes();
 
+-- Gerar Notificações Automáticas
+CREATE OR REPLACE FUNCTION public.notify_ticket_changes()
+RETURNS TRIGGER AS $$
+DECLARE
+    profile_record RECORD;
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        -- Notify all ADMINs and GESTORs in the institution
+        FOR profile_record IN 
+            SELECT id FROM public.profiles 
+            WHERE institution_id = NEW.institution_id 
+              AND role IN ('ADMIN', 'SUPERADMIN', 'GESTOR')
+        LOOP
+            -- Don't notify the person who created it if they happen to be an ADMIN
+            IF auth.uid() IS NULL OR profile_record.id <> auth.uid() THEN
+                INSERT INTO public.notifications (institution_id, user_id, title, message, type, link)
+                VALUES (NEW.institution_id, profile_record.id, 'Novo Chamado', 'Chamado "' || NEW.title || '" foi aberto.', 'TICKET_CREATED', '/chamados?ticket=' || NEW.id);
+            END IF;
+        END LOOP;
+    ELSIF TG_OP = 'UPDATE' THEN
+        IF OLD.assigned_to IS DISTINCT FROM NEW.assigned_to AND NEW.assigned_to IS NOT NULL THEN
+            -- Notify the assigned technician
+            IF auth.uid() IS NULL OR NEW.assigned_to <> auth.uid() THEN
+                INSERT INTO public.notifications (institution_id, user_id, title, message, type, link)
+                VALUES (NEW.institution_id, NEW.assigned_to, 'Chamado Atribuído', 'Você foi encarregado do chamado "' || NEW.title || '".', 'TICKET_ASSIGNED', '/chamados?ticket=' || NEW.id);
+            END IF;
+        END IF;
+
+        IF OLD.status <> NEW.status THEN
+            -- Notify requester
+            IF NEW.user_id IS NOT NULL AND (auth.uid() IS NULL OR NEW.user_id <> auth.uid()) THEN
+                INSERT INTO public.notifications (institution_id, user_id, title, message, type, link)
+                VALUES (NEW.institution_id, NEW.user_id, 'Atualização de Status', 'O chamado "' || NEW.title || '" mudou de status.', 'TICKET_UPDATED', '/chamados?ticket=' || NEW.id);
+            END IF;
+        END IF;
+        
+        IF NEW.sla_breached = TRUE AND OLD.sla_breached = FALSE THEN
+            -- Notify Gestores
+            FOR profile_record IN 
+                SELECT id FROM public.profiles 
+                WHERE institution_id = NEW.institution_id 
+                  AND role IN ('ADMIN', 'SUPERADMIN', 'GESTOR')
+            LOOP
+                INSERT INTO public.notifications (institution_id, user_id, title, message, type, link)
+                VALUES (NEW.institution_id, profile_record.id, 'SLA Atrasado', 'O prazo do chamado "' || NEW.title || '" expirou.', 'SLA_BREACHED', '/chamados?ticket=' || NEW.id);
+            END LOOP;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER trg_notify_ticket_changes
+AFTER INSERT OR UPDATE ON public.tickets
+FOR EACH ROW EXECUTE PROCEDURE public.notify_ticket_changes();
+
 
 -- Acompanhamento Público de Chamados
 CREATE OR REPLACE FUNCTION public.get_public_ticket(p_ticket_id UUID)
@@ -363,6 +433,7 @@ ALTER TABLE public.ticket_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ticket_checklists ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.maintenance_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.maintenance_plan_checklists ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
 -- Função auxiliar para obter a instituição do usuário logado
 CREATE OR REPLACE FUNCTION public.get_my_institution_id()
@@ -551,6 +622,15 @@ CREATE POLICY "Maintenance Plan Checklists: Acesso para mesma instituição"
             AND (p.institution_id = public.get_my_institution_id() OR public.is_superadmin())
         )
     );
+
+-- Políticas: Notifications
+CREATE POLICY "Notifications: Users can view their own notifications"
+    ON public.notifications FOR SELECT
+    USING (user_id = auth.uid());
+
+CREATE POLICY "Notifications: Users can update their own notifications (mark as read)"
+    ON public.notifications FOR UPDATE
+    USING (user_id = auth.uid());
 
 
 -- 5. STORAGE BUCKETS (Necessário executar via interface gráfica do Supabase ou API Storage, mas deixamos o SQL se estiver usando Supabase CLI localmente)
