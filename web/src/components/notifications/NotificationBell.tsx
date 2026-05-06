@@ -23,7 +23,7 @@ const getIconForType = (type: NotificationType) => {
 };
 
 export const NotificationBell: React.FC = () => {
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, permission, requestNotificationPermission } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -67,14 +67,24 @@ export const NotificationBell: React.FC = () => {
       {isOpen && (
         <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/50">
-            <h3 className="font-semibold text-slate-800">Notificações</h3>
+            <div className="flex flex-col gap-2">
+              <h3 className="font-semibold text-slate-800">Notificações</h3>
+              {permission === 'default' && (
+                <button
+                  onClick={() => requestNotificationPermission()}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium text-left bg-blue-50 p-1.5 rounded"
+                >
+                  Ativar notificações no dispositivo
+                </button>
+              )}
+            </div>
             {unreadCount > 0 && (
               <button
                 onClick={() => markAllAsRead()}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 mt-1 sm:mt-0"
               >
                 <Check className="h-3 w-3" />
-                Marcar todas como lidas
+                Marcar lidas
               </button>
             )}
           </div>

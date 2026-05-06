@@ -1,12 +1,27 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import type { Notification } from '../types/database.types';
+import type { Notification as DbNotification } from '../types/database.types';
 
 export const useNotifications = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [permission, setPermission] = useState<NotificationPermission>(
+    'Notification' in window ? window.Notification.permission : 'default'
+  );
+
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) return false;
+    try {
+      const p = await window.Notification.requestPermission();
+      setPermission(p);
+      return p === 'granted';
+    } catch (e) {
+      console.error('Error requesting notification permission:', e);
+      return false;
+    }
+  };
 
   // Buscar notificações
   const { data: notifications = [], isLoading } = useQuery({
@@ -21,7 +36,7 @@ export const useNotifications = () => {
         .limit(50);
 
       if (error) throw error;
-      return data as Notification[];
+      return data as DbNotification[];
     },
     enabled: !!user,
   });
@@ -44,9 +59,34 @@ export const useNotifications = () => {
           table: 'notifications',
           filter: `user_id=eq.${user.id}`,
         },
-        () => {
+        (payload) => {
           // Invalida a query para buscar os dados atualizados
           queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
+
+          // Se for uma inserção (nova notificação) e tivermos permissão, exibe no SO
+          if (
+            payload.eventType === 'INSERT' &&
+            'Notification' in window &&
+            window.Notification.permission === 'granted'
+          ) {
+            const newNotification = payload.new as DbNotification;
+            
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.ready.then((registration) => {
+                registration.showNotification(newNotification.title, {
+                  body: newNotification.message || '',
+                  icon: '/logo.png',
+                  badge: '/favicon.svg',
+                  data: { link: newNotification.link }
+                });
+              });
+            } else {
+              new window.Notification(newNotification.title, {
+                body: newNotification.message || '',
+                icon: '/logo.png'
+              });
+            }
+          }
         }
       )
       .subscribe();
@@ -97,5 +137,7 @@ export const useNotifications = () => {
     markAsRead: markAsRead.mutate,
     markAllAsRead: markAllAsRead.mutate,
     isMarking: markAsRead.isPending || markAllAsRead.isPending,
+    permission,
+    requestNotificationPermission,
   };
 };
