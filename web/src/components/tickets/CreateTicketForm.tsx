@@ -10,7 +10,7 @@ import { Label } from '../ui/Label';
 import { Button } from '../ui/Button';
 import { Select } from '../ui/Select';
 import { priorityLabels } from '../../utils/ticket';
-import { TicketPriority } from '../../types/database.types';
+import type { TicketPriority } from '../../types/database.types';
 
 const ticketSchema = z.object({
   title: z.string().min(3, 'Título obrigatório (mínimo 3 caracteres)'),

@@ -16,9 +16,8 @@ import {
   parseISO,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Clock } from 'lucide-react';
-import { Ticket } from '../../types/database.types';
-import { priorityBadgeClass, statusBadgeClass } from '../../utils/ticket';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import type { Ticket } from '../../hooks/useTickets';
 
 interface TicketsCalendarProps {
   tickets: Ticket[];

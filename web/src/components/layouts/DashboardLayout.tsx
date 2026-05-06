@@ -12,7 +12,6 @@ import {
   UsersRound,
   Settings,
   Menu,
-  X,
   ChevronRight,
   Clock,
   Activity,

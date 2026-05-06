@@ -10,7 +10,7 @@ import { Label } from '../../components/ui/Label';
 import { Button } from '../../components/ui/Button';
 import { Select } from '../../components/ui/Select';
 import { priorityLabels } from '../../utils/ticket';
-import { TicketPriority } from '../../types/database.types';
+import type { TicketPriority } from '../../types/database.types';
 import { Ticket, CheckCircle2, AlertCircle, Copy, ArrowRight } from 'lucide-react';
 
 const publicTicketSchema = z.object({

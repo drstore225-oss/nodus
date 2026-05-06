@@ -1,5 +1,5 @@
 import React from 'react';
-import { Ticket } from '../../hooks/useTickets';
+import type { Ticket } from '../../hooks/useTickets';
 import {
   statusLabels, priorityLabels,
   statusBadgeClass, priorityBadgeClass, priorityDotClass,

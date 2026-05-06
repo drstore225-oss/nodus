@@ -9,12 +9,12 @@ import {
   useDeleteMaintenancePlan,
   useCreatePlanChecklistItem,
   useDeletePlanChecklistItem,
-  MaintenanceFrequency
 } from '../../hooks/useMaintenancePlans';
+import type { MaintenanceFrequency } from '../../hooks/useMaintenancePlans';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
-import { Calendar, Plus, Save, Settings, Trash2, X, ListTodo, Activity } from 'lucide-react';
-import { TicketPriority } from '../../types/database.types';
+import { Calendar, Plus, Trash2, X, ListTodo, Activity } from 'lucide-react';
+import type { TicketPriority } from '../../types/database.types';
 
 const frequencyLabels: Record<MaintenanceFrequency, string> = {
   DAILY: 'Diária',
@@ -44,7 +44,6 @@ export const MaintenancePlans: React.FC = () => {
   const removeChecklistMutation = useDeletePlanChecklistItem();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [newChecklistItem, setNewChecklistItem] = useState('');
 
   const [formData, setFormData] = useState({

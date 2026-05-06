@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { statusLabels, priorityLabels, statusBadgeClass, priorityBadgeClass, formatDate } from '../../utils/ticket';
-import { TicketStatus, TicketPriority } from '../../types/database.types';
+import type { TicketStatus, TicketPriority } from '../../types/database.types';
 import { Ticket, Clock, CheckCircle2, AlertCircle, ArrowLeft, Building2 } from 'lucide-react';
 
 interface PublicTicketData {

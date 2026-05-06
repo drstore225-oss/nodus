@@ -4,7 +4,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
 import { Label } from '../../components/ui/Label';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 

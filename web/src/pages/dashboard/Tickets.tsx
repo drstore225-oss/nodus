@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
-import { useTickets, useCreateTicket, TicketFilters } from '../../hooks/useTickets';
+import { useTickets, useCreateTicket } from '../../hooks/useTickets';
+import type { TicketFilters, TicketType } from '../../hooks/useTickets';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUsers } from '../../hooks/useUsers';
-import { TicketStatus, TicketPriority } from '../../types/database.types';
-import { TicketType } from '../../hooks/useTickets';
+import type { TicketStatus, TicketPriority } from '../../types/database.types';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { TicketCard } from '../../components/tickets/TicketCard';
 import { CreateTicketForm } from '../../components/tickets/CreateTicketForm';
 import { TicketDetailPanel } from '../../components/tickets/TicketDetailPanel';
 import { TicketsCalendar } from '../../components/tickets/TicketsCalendar';
-import { statusLabels, priorityLabels } from '../../utils/ticket';
-import { Plus, Search, SlidersHorizontal, Ticket as TicketIcon, AlertTriangle, List, Calendar as CalendarIcon } from 'lucide-react';
+import { Plus, Search, Ticket as TicketIcon, AlertTriangle, List, Calendar as CalendarIcon } from 'lucide-react';
 
 const STATUS_OPTIONS: { value: TicketStatus | ''; label: string }[] = [
   { value: '', label: 'Todos os Status' },

@@ -5,8 +5,8 @@ import {
   useUpdateInstitution,
   useDeleteInstitution,
 } from '../../hooks/useInstitutions';
-import { Institution } from '../../types/database.types';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
+import type { Institution } from '../../types/database.types';
+import { Card, CardContent, CardHeader } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { InstitutionForm } from '../../components/institutions/InstitutionForm';

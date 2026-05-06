@@ -9,7 +9,7 @@ import {
 } from '../../utils/ticket';
 import { Button } from '../ui/Button';
 import { Select } from '../ui/Select';
-import { TicketStatus } from '../../types/database.types';
+import type { TicketStatus } from '../../types/database.types';
 import {
   X, Clock, AlertTriangle, User, Tag, DollarSign, Users, Calendar,
   CheckCircle, ArrowRight, Paperclip, History, Save, CheckSquare, Square

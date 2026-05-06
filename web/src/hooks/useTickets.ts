@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { TicketStatus, TicketPriority } from '../types/database.types';
+import type { TicketStatus, TicketPriority } from '../types/database.types';
 
 export type TicketType = 'CORRECTIVE' | 'PREVENTIVE';
 

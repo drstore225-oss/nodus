@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { Profile, UserRole } from '../types/database.types';
+import type { Profile, UserRole } from '../types/database.types';
 
 export interface ProfileWithTeam extends Profile {
   team?: { name: string } | null;

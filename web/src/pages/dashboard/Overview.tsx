@@ -20,7 +20,6 @@ import {
   Ticket,
   Clock,
   CheckCircle,
-  XCircle,
   AlertTriangle,
   Flame,
   TrendingUp,

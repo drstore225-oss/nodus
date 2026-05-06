@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { Institution } from '../types/database.types';
+import type { Institution } from '../types/database.types';
 
 export type InstitutionInsert = Omit<Institution, 'id' | 'created_at'>;
 

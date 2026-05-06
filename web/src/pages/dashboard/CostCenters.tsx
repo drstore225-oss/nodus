@@ -3,8 +3,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
-  useCostCenters, useCreateCostCenter, useUpdateCostCenter, useDeleteCostCenter, CostCenter
+  useCostCenters, useCreateCostCenter, useUpdateCostCenter, useDeleteCostCenter,
 } from '../../hooks/useCostCenters';
+import type { CostCenter } from '../../hooks/useCostCenters';
 import { useInstitutions } from '../../hooks/useInstitutions';
 import { useAuth } from '../../contexts/AuthContext';
 import { Card, CardContent } from '../../components/ui/Card';

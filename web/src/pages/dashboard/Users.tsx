@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useUsers, useUpdateUserRole, ProfileWithTeam } from '../../hooks/useUsers';
+import { useUsers, useUpdateUserRole } from '../../hooks/useUsers';
+import type { ProfileWithTeam } from '../../hooks/useUsers';
 import { useInstitutions } from '../../hooks/useInstitutions';
 import { useAuth } from '../../contexts/AuthContext';
-import { UserRole } from '../../types/database.types';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
+import type { UserRole } from '../../types/database.types';
+import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
@@ -42,7 +43,7 @@ export const UsersPage: React.FC = () => {
   const { data: institutions = [] } = useInstitutions();
   const updateMutation = useUpdateUserRole();
 
-  const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<{
+  const { register, handleSubmit, reset } = useForm<{
     role: UserRole;
     institution_id: string;
     team_id: string;

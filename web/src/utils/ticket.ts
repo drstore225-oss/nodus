@@ -1,4 +1,4 @@
-import { TicketStatus, TicketPriority } from '../types/database.types';
+import type { TicketStatus, TicketPriority } from '../types/database.types';
 
 export const statusLabels: Record<TicketStatus, string> = {
   OPEN: 'Aberto',
