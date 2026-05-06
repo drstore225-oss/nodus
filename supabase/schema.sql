@@ -518,14 +518,13 @@ CREATE POLICY "Tickets: Solicitante pode criar os seus"
     TO authenticated
     WITH CHECK (user_id = auth.uid());
 
-CREATE POLICY "Tickets: Tecnico vê os que estão atribuidos a ele e pode atualizar"
+CREATE POLICY "Tickets: Tecnicos e Gestores veem todos da instituicao"
     ON public.tickets FOR SELECT
     TO authenticated
-    USING (assigned_to = auth.uid());
-
-CREATE POLICY "Tickets: Gestor vê os da sua equipe"
-    ON public.tickets FOR SELECT
-    USING (team_id = public.get_my_team_id());
+    USING (
+        (public.get_my_role() IN ('TECNICO', 'GESTOR') AND institution_id = public.get_my_institution_id())
+        OR assigned_to = auth.uid()
+    );
 
 CREATE POLICY "Tickets: Admin ou Superadmin veem todos na instituição"
     ON public.tickets FOR ALL
