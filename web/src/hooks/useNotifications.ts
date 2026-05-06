@@ -30,7 +30,10 @@ export const useNotifications = () => {
   useEffect(() => {
     if (!user) return;
 
-    const channel = supabase.channel(`notifications-${user.id}`);
+    // Usamos um ID único para o canal para evitar conflitos quando o componente
+    // é renderizado múltiplas vezes na tela (ex: header mobile e header desktop)
+    const channelId = `notifications-${user.id}-${Math.random().toString(36).substring(7)}`;
+    const channel = supabase.channel(channelId);
     
     channel
       .on(
