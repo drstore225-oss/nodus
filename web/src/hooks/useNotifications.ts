@@ -30,8 +30,9 @@ export const useNotifications = () => {
   useEffect(() => {
     if (!user) return;
 
-    const subscription = supabase
-      .channel('notifications-changes')
+    const channel = supabase.channel(`notifications-${user.id}`);
+    
+    channel
       .on(
         'postgres_changes',
         {
@@ -48,7 +49,7 @@ export const useNotifications = () => {
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(channel);
     };
   }, [user, queryClient]);
 
