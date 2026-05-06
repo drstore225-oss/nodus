@@ -97,9 +97,7 @@ export const DashboardLayout: React.FC = () => {
       {/* Logo */}
       <div className="px-6 py-5 border-b border-slate-100">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Ticket className="h-5 w-5 text-white" />
-          </div>
+          <img src="/logo.png" alt="Nodus" className="h-8 w-8 object-contain" />
           <span className="text-xl font-bold text-slate-800">Nodus</span>
         </div>
       </div>
@@ -187,7 +185,10 @@ export const DashboardLayout: React.FC = () => {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <span className="font-bold text-slate-800">Nodus</span>
+          <div className="flex items-center gap-2">
+            <img src="/logo.png" alt="Nodus" className="h-6 w-6 object-contain" />
+            <span className="font-bold text-slate-800">Nodus</span>
+          </div>
         </header>
 
         {/* Page Content */}

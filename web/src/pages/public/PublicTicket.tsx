@@ -162,9 +162,7 @@ export const PublicTicket: React.FC = () => {
       <div className="max-w-2xl w-full space-y-8">
         
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-sm">
-            <Ticket className="h-6 w-6 text-white" />
-          </div>
+          <img src="/logo.png" alt="Nodus Logo" className="mx-auto h-16 w-auto object-contain mb-2" />
           <h2 className="mt-6 text-3xl font-extrabold text-slate-900">
             Abertura de Chamado
           </h2>

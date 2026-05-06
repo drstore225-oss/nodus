@@ -42,7 +42,8 @@ export const Login: React.FC = () => {
 
   return (
     <div>
-      <div className="mb-8">
+      <div className="mb-8 flex flex-col items-center text-center">
+        <img src="/logo.png" alt="Nodus Logo" className="h-20 mb-4 object-contain" />
         <h2 className="text-3xl font-bold text-slate-900">Bem-vindo(a) de volta</h2>
         <p className="mt-2 text-slate-500">Faça login para acessar o sistema</p>
       </div>
