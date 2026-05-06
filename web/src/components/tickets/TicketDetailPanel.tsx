@@ -3,6 +3,8 @@ import { useTicket, useUpdateTicket, useUpdateChecklistItem } from '../../hooks/
 import { useUsers } from '../../hooks/useUsers';
 import { useTeams } from '../../hooks/useTeams';
 import { useAuth } from '../../contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
+import { AttachmentUploader } from './AttachmentUploader';
 import {
   statusLabels, priorityLabels, statusBadgeClass, priorityBadgeClass,
   formatDate, formatCurrency, getSLARemaining,
@@ -36,6 +38,7 @@ const nextStatusLabels: Record<TicketStatus, string> = {
 
 export const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticketId, onClose }) => {
   const { profile } = useAuth();
+  const queryClient = useQueryClient();
   const { data: ticket, isLoading } = useTicket(ticketId);
   const { data: users = [] } = useUsers(profile?.institution_id ?? undefined);
   const { data: teams = [] } = useTeams(profile?.institution_id ?? undefined);
@@ -81,11 +84,16 @@ export const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticketId, 
 
   const handleStatusChange = async (newStatus: TicketStatus) => {
     if (!ticket) return;
-    if (newStatus === 'RESOLVED' && !ticket.assigned_to) {
-      alert('Não é possível resolver um chamado sem técnico atribuído.');
-      return;
+
+    const updatePayload: Partial<typeof ticket> & { id: string } = { id: ticket.id, status: newStatus };
+
+    // Se o chamado não tem técnico atribuído e o usuário logado está mudando o status,
+    // auto-atribui ele mesmo (válido para IN_PROGRESS e RESOLVED)
+    if (!ticket.assigned_to && profile?.id && (newStatus === 'IN_PROGRESS' || newStatus === 'RESOLVED')) {
+      updatePayload.assigned_to = profile.id;
     }
-    await updateMutation.mutateAsync({ id: ticket.id, status: newStatus });
+
+    await updateMutation.mutateAsync(updatePayload);
   };
 
   const handleAssign = async () => {
@@ -412,14 +420,16 @@ export const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticketId, 
               </div>
             )}
 
-            {/* Attachments Section */}
-            {ticket.attachments && ticket.attachments.length > 0 && (
-              <div className="border border-slate-200 rounded-xl p-5 bg-white">
-                <p className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-                  <Paperclip className="h-4 w-4" />
-                  Anexos e Fotos ({ticket.attachments.length})
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {/* Attachments Section - always visible so users can upload */}
+            <div className="border border-slate-200 rounded-xl p-5 bg-white">
+              <p className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <Paperclip className="h-4 w-4" />
+                Anexos e Fotos {ticket.attachments && ticket.attachments.length > 0 ? `(${ticket.attachments.length})` : ''}
+              </p>
+
+              {/* Existing attachments grid */}
+              {ticket.attachments && ticket.attachments.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
                   {ticket.attachments.map((att) => (
                     <a
                       key={att.id}
@@ -433,8 +443,22 @@ export const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticketId, 
                     </a>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* Upload area - visible to assigned tech and managers */}
+              {(canAssign || ticket.assigned_to === profile?.id) && ticket.status !== 'RESOLVED' && ticket.status !== 'CANCELED' && (
+                <div className="border-t border-slate-100 pt-4 mt-2">
+                  <p className="text-xs text-slate-500 mb-3">Adicionar fotos ao chamado:</p>
+                  <AttachmentUploader
+                    ticketId={ticket.id}
+                    compact
+                    onUploaded={() => {
+                      queryClient.invalidateQueries({ queryKey: ['tickets', ticket.id] });
+                    }}
+                  />
+                </div>
+              )}
+            </div>
 
             {/* Cost Section */}
             {canEditCosts && (

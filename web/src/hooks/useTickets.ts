@@ -229,6 +229,10 @@ export function useUpdateTicket() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
     },
+    onError: (error: Error) => {
+      console.error('Erro ao atualizar chamado:', error);
+      alert(`Erro ao atualizar chamado: ${error.message}\n\nVerifique se você tem permissão para realizar esta ação.`);
+    },
   });
 }
 

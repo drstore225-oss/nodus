@@ -9,9 +9,10 @@ import { Input } from '../../components/ui/Input';
 import { Label } from '../../components/ui/Label';
 import { Button } from '../../components/ui/Button';
 import { Select } from '../../components/ui/Select';
+import { AttachmentUploader } from '../../components/tickets/AttachmentUploader';
 import { priorityLabels } from '../../utils/ticket';
 import type { TicketPriority } from '../../types/database.types';
-import { CheckCircle2, AlertCircle, Copy, ArrowRight } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Copy, ArrowRight, Paperclip } from 'lucide-react';
 
 const publicTicketSchema = z.object({
   requester_name: z.string().min(3, 'Nome obrigatório (mínimo 3 caracteres)'),
@@ -46,6 +47,7 @@ export const PublicTicket: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [createdTicketId, setCreatedTicketId] = useState<string | null>(null);
+  const [showAttachStep, setShowAttachStep] = useState(false);
 
   const { register, handleSubmit, formState: { errors } } = useForm<PublicTicketFormValues>({
     resolver: zodResolver(publicTicketSchema),
@@ -74,13 +76,18 @@ export const PublicTicket: React.FC = () => {
       if (error) throw error;
 
       setCreatedTicketId(newTicketId);
-      setIsSuccess(true);
+      setShowAttachStep(true); // Show photo attachment step first
     } catch (error) {
       console.error('Erro ao abrir chamado:', error);
       alert('Não foi possível enviar o chamado. Verifique sua conexão e tente novamente.');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleFinish = () => {
+    setIsSuccess(true);
+    setShowAttachStep(false);
   };
 
   if (isLoadingInst) {
@@ -102,6 +109,34 @@ export const PublicTicket: React.FC = () => {
           O link que você acessou é inválido ou a instituição não existe mais. 
           Por favor, solicite um novo link de atendimento.
         </p>
+      </div>
+    );
+  }
+
+  // Step 2: Attach photos before showing success
+  if (showAttachStep && createdTicketId) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+          <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-5">
+            <Paperclip className="h-7 w-7 text-blue-600" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-800 text-center mb-1">Chamado criado!</h2>
+          <p className="text-sm text-slate-500 text-center mb-6">
+            Deseja adicionar fotos do problema? (Opcional)
+          </p>
+
+          <AttachmentUploader ticketId={createdTicketId} />
+
+          <div className="mt-6 flex flex-col gap-3">
+            <Button onClick={handleFinish}>
+              Concluir e Ver Acompanhamento <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+            <Button variant="ghost" onClick={handleFinish}>
+              Pular, sem fotos
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
