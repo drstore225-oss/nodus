@@ -14,7 +14,7 @@ import { Select } from '../ui/Select';
 import type { TicketStatus } from '../../types/database.types';
 import {
   X, Clock, AlertTriangle, User, Tag, DollarSign, Users, Calendar,
-  CheckCircle, ArrowRight, Paperclip, History, Save, CheckSquare, Square
+  CheckCircle, ArrowRight, Paperclip, History, Save, CheckSquare, Square, Pencil
 } from 'lucide-react';
 
 interface TicketDetailPanelProps {
@@ -60,7 +60,17 @@ export const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticketId, 
     estimated_cost: 0,
     approved_cost: 0,
     actual_cost: 0,
+    actual_cost: 0,
     cost_notes: '',
+  });
+
+  // Ticket basic info edit state
+  const [isEditingTicket, setIsEditingTicket] = useState(false);
+  const [ticketEdit, setTicketEdit] = useState({
+    title: '',
+    description: '',
+    priority: 'MEDIUM' as typeof ticket.priority,
+    category: '',
   });
 
   useEffect(() => {
@@ -74,11 +84,19 @@ export const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticketId, 
       });
       setScheduledAt(ticket.scheduled_at ? new Date(ticket.scheduled_at).toISOString().slice(0, 16) : '');
       setDeadlineAt(ticket.deadline_at ? new Date(ticket.deadline_at).toISOString().slice(0, 16) : '');
+      
+      setTicketEdit({
+        title: ticket.title,
+        description: ticket.description || '',
+        priority: ticket.priority,
+        category: ticket.category || '',
+      });
     }
   }, [ticket]);
 
   const canAssign = ['GESTOR', 'ADMIN', 'SUPERADMIN'].includes(profile?.role || '');
   const canEditCosts = ['GESTOR', 'ADMIN', 'SUPERADMIN'].includes(profile?.role || '');
+  const canEditTicket = canAssign || ticket?.user_id === profile?.id;
   const slaRemaining = getSLARemaining(ticket?.deadline_at);
   const isActive = ticket?.status === 'OPEN' || ticket?.status === 'IN_PROGRESS';
 
@@ -136,6 +154,22 @@ export const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticketId, 
     setIsEditingCosts(false);
   };
 
+  const handleSaveTicketEdit = async () => {
+    if (!ticket) return;
+    if (!ticketEdit.title.trim()) {
+      alert('O título é obrigatório.');
+      return;
+    }
+    await updateMutation.mutateAsync({
+      id: ticket.id,
+      title: ticketEdit.title,
+      description: ticketEdit.description,
+      priority: ticketEdit.priority,
+      category: ticketEdit.category,
+    });
+    setIsEditingTicket(false);
+  };
+
   const technicianUsers = users.filter((u) => u.role === 'TECNICO' || u.role === 'GESTOR');
 
   if (!ticket && isLoading) {
@@ -168,21 +202,86 @@ export const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticketId, 
               {priorityLabels[ticket.priority]}
             </span>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {!isEditingTicket && canEditTicket && ticket.status !== 'RESOLVED' && ticket.status !== 'CANCELED' && (
+              <button onClick={() => setIsEditingTicket(true)} className="p-2 rounded-lg text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Editar Chamado">
+                <Pencil className="h-5 w-5" />
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto">
           <div className="px-6 py-5 space-y-8">
-            {/* Title */}
-            <div>
-              <h2 className="text-xl font-bold text-slate-800">{ticket.title}</h2>
-              {ticket.description && (
-                <p className="mt-2 text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{ticket.description}</p>
-              )}
-            </div>
+            {isEditingTicket ? (
+              <div className="bg-white border border-blue-200 rounded-xl p-5 space-y-4 shadow-sm">
+                <p className="text-sm font-bold text-slate-800 border-b pb-2">Editar Detalhes do Chamado</p>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Título</label>
+                  <input
+                    type="text"
+                    className="w-full h-9 rounded-md border border-slate-300 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    value={ticketEdit.title}
+                    onChange={(e) => setTicketEdit({ ...ticketEdit, title: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Descrição</label>
+                  <textarea
+                    className="w-full rounded-md border border-slate-300 p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none h-24"
+                    value={ticketEdit.description}
+                    onChange={(e) => setTicketEdit({ ...ticketEdit, description: e.target.value })}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Prioridade</label>
+                    <Select
+                      className="w-full"
+                      value={ticketEdit.priority}
+                      onChange={(e) => setTicketEdit({ ...ticketEdit, priority: e.target.value as any })}
+                      options={Object.entries(priorityLabels).map(([v, l]) => ({ value: v, label: l }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Categoria</label>
+                    <Select
+                      className="w-full"
+                      value={ticketEdit.category}
+                      onChange={(e) => setTicketEdit({ ...ticketEdit, category: e.target.value })}
+                      options={[
+                        { value: 'Elétrica', label: 'Elétrica' },
+                        { value: 'Hidráulica', label: 'Hidráulica' },
+                        { value: 'Civil', label: 'Civil' },
+                        { value: 'Climatização', label: 'Climatização (AC/Ventilação)' },
+                        { value: 'Tecnologia', label: 'Tecnologia / TI' },
+                        { value: 'Segurança', label: 'Segurança Patrimonial' },
+                        { value: 'Limpeza', label: 'Limpeza / Conservação' },
+                        { value: 'Jardinagem', label: 'Jardinagem' },
+                        { value: 'Outros', label: 'Outros' },
+                      ]}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="ghost" onClick={() => setIsEditingTicket(false)}>Cancelar</Button>
+                  <Button onClick={handleSaveTicketEdit} isLoading={updateMutation.isPending}>
+                    <Save className="h-4 w-4 mr-2" /> Salvar Alterações
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">{ticket.title}</h2>
+                {ticket.description && (
+                  <p className="mt-2 text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{ticket.description}</p>
+                )}
+              </div>
+            )}
 
             {/* SLA Alert */}
             {isActive && ticket.sla_breached && (
