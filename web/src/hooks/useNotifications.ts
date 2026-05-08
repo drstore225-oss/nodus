@@ -65,7 +65,7 @@ export const useNotifications = () => {
         console.log('[push] No existing subscription, creating new...');
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as any,
         });
       } else {
         console.log('[push] Existing subscription found, re-saving...');
@@ -97,7 +97,7 @@ export const useNotifications = () => {
         try {
           subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as any,
           });
         } catch {
           // Pode falhar se a permissão foi revogada
@@ -159,7 +159,6 @@ export const useNotifications = () => {
                 body: n.message || '',
                 icon: '/logo.png',
                 badge: '/logo.png',
-                vibrate: [200, 100, 200],
                 tag: n.id,
                 data: { link: n.link },
               });
