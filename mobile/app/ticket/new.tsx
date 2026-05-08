@@ -16,7 +16,7 @@ const PRIORITIES: { label: string; value: TicketPriority; color: string }[] = [
 ];
 
 const CATEGORIES = [
-  'Elétrica', 'Hidráulica', 'Climatização', 'Civil', 'Jardinagem', 'Limpeza', 'Marcenaria', 'Outros',
+  'Elétrica', 'Hidráulica', 'Climatização', 'Civil', 'Jardinagem', 'Limpeza', 'Marcenaria', 'Equipamentos', 'Outros',
 ];
 
 const TICKET_TYPES: { label: string; value: TicketType; icon: string; color: string; desc: string }[] = [

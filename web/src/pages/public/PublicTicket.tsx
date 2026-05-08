@@ -38,6 +38,7 @@ const categoryOptions = [
   { value: 'Segurança', label: 'Segurança Patrimonial' },
   { value: 'Limpeza', label: 'Limpeza / Conservação' },
   { value: 'Jardinagem', label: 'Jardinagem' },
+  { value: 'Equipamentos', label: 'Equipamentos' },
   { value: 'Outros', label: 'Outros' },
 ];
 
