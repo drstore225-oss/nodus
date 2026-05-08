@@ -10,7 +10,8 @@ import { TicketCard } from '../../components/tickets/TicketCard';
 import { CreateTicketForm } from '../../components/tickets/CreateTicketForm';
 import { TicketDetailPanel } from '../../components/tickets/TicketDetailPanel';
 import { TicketsCalendar } from '../../components/tickets/TicketsCalendar';
-import { Plus, Search, Ticket as TicketIcon, AlertTriangle, List, Calendar as CalendarIcon } from 'lucide-react';
+import { AttachmentUploader } from '../../components/tickets/AttachmentUploader';
+import { Plus, Search, Ticket as TicketIcon, AlertTriangle, List, Calendar as CalendarIcon, Paperclip } from 'lucide-react';
 
 const STATUS_OPTIONS: { value: TicketStatus | ''; label: string }[] = [
   { value: '', label: 'Todos os Status' },
@@ -41,6 +42,7 @@ export const TicketsPage: React.FC = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [newlyCreatedTicketId, setNewlyCreatedTicketId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<TicketStatus | ''>('');
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | ''>('');
@@ -66,14 +68,21 @@ export const TicketsPage: React.FC = () => {
       alert('Você precisa estar vinculado a uma Instituição para abrir chamados. Vá no menu "Usuários" e vincule seu perfil a uma instituição.');
       return;
     }
-    await createMutation.mutateAsync({
+    const created = await createMutation.mutateAsync({
       ...data,
       institution_id: profile.institution_id,
       user_id: user!.id,
       team_id: data.team_id || null,
       cost_center_id: data.cost_center_id || null,
     });
+    // Advance to photo attachment step
+    setNewlyCreatedTicketId(created.id);
+  };
+
+  const handleCloseCreateModal = () => {
     setIsCreateOpen(false);
+    setNewlyCreatedTicketId(null);
+    setSelectedDate(null);
   };
 
   const technicianUsers = users.filter((u) => u.role === 'TECNICO' || u.role === 'GESTOR');
@@ -215,7 +224,7 @@ export const TicketsPage: React.FC = () => {
         <TicketsCalendar 
           tickets={tickets} 
           onTicketClick={setSelectedTicketId} 
-          onDayClick={(date) => {
+          onDayDoubleClick={(date) => {
             setSelectedDate(date);
             setIsCreateOpen(true);
           }}
@@ -225,16 +234,39 @@ export const TicketsPage: React.FC = () => {
       {/* Create Modal */}
       <Modal
         isOpen={isCreateOpen}
-        onClose={() => setIsCreateOpen(false)}
-        title="Abrir Novo Chamado"
+        onClose={handleCloseCreateModal}
+        title={newlyCreatedTicketId ? 'Adicionar Fotos (Opcional)' : 'Abrir Novo Chamado'}
         size="lg"
       >
-        <CreateTicketForm
-          onSubmit={handleCreate}
-          isLoading={createMutation.isPending}
-          onCancel={() => setIsCreateOpen(false)}
-          initialDate={selectedDate}
-        />
+        {newlyCreatedTicketId ? (
+          <div className="space-y-5">
+            <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <Paperclip className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+              <p className="text-sm text-emerald-800">
+                Chamado criado com sucesso! Deseja adicionar fotos antes de concluir?
+              </p>
+            </div>
+            <AttachmentUploader
+              ticketId={newlyCreatedTicketId}
+              onUploaded={() => {}}
+            />
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+              <Button variant="outline" onClick={handleCloseCreateModal}>
+                Pular, sem fotos
+              </Button>
+              <Button onClick={handleCloseCreateModal}>
+                Concluir
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <CreateTicketForm
+            onSubmit={handleCreate}
+            isLoading={createMutation.isPending}
+            onCancel={handleCloseCreateModal}
+            initialDate={selectedDate}
+          />
+        )}
       </Modal>
 
       {/* Detail Panel */}

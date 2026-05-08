@@ -126,7 +126,7 @@ export const PublicTicket: React.FC = () => {
             Deseja adicionar fotos do problema? (Opcional)
           </p>
 
-          <AttachmentUploader ticketId={createdTicketId} />
+          <AttachmentUploader ticketId={createdTicketId} autoUpload />
 
           <div className="mt-6 flex flex-col gap-3">
             <Button onClick={handleFinish}>
