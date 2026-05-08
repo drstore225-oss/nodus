@@ -11,7 +11,7 @@ import {
 } from '../../utils/ticket';
 import { Button } from '../ui/Button';
 import { Select } from '../ui/Select';
-import type { TicketStatus } from '../../types/database.types';
+import type { TicketStatus, TicketPriority } from '../../types/database.types';
 import {
   X, Clock, AlertTriangle, User, Tag, DollarSign, Users, Calendar,
   CheckCircle, ArrowRight, Paperclip, History, Save, CheckSquare, Square, Pencil
@@ -60,7 +60,6 @@ export const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticketId, 
     estimated_cost: 0,
     approved_cost: 0,
     actual_cost: 0,
-    actual_cost: 0,
     cost_notes: '',
   });
 
@@ -69,7 +68,7 @@ export const TicketDetailPanel: React.FC<TicketDetailPanelProps> = ({ ticketId, 
   const [ticketEdit, setTicketEdit] = useState({
     title: '',
     description: '',
-    priority: 'MEDIUM' as typeof ticket.priority,
+    priority: 'MEDIUM' as TicketPriority,
     category: '',
   });
 
