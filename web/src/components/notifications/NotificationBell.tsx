@@ -25,6 +25,7 @@ const getIconForType = (type: NotificationType) => {
 export const NotificationBell: React.FC = () => {
   const { notifications, unreadCount, markAsRead, markAllAsRead, permission, requestNotificationPermission } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
+  const [pushStatus, setPushStatus] = useState<{ msg: string; ok: boolean } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -71,11 +72,25 @@ export const NotificationBell: React.FC = () => {
               <h3 className="font-semibold text-slate-800">Notificações</h3>
               {permission === 'default' && (
                 <button
-                  onClick={() => requestNotificationPermission()}
+                  onClick={async () => {
+                    setPushStatus(null);
+                    const result = await requestNotificationPermission();
+                    if (result.granted && !result.error) {
+                      setPushStatus({ msg: 'Notificações ativadas! ✅', ok: true });
+                    } else {
+                      setPushStatus({ msg: result.error || 'Erro desconhecido', ok: false });
+                    }
+                    setTimeout(() => setPushStatus(null), 6000);
+                  }}
                   className="text-xs text-blue-600 hover:text-blue-800 font-medium text-left bg-blue-50 p-1.5 rounded"
                 >
                   Ativar notificações no dispositivo
                 </button>
+              )}
+              {pushStatus && (
+                <p className={`text-xs px-2 py-1 rounded ${pushStatus.ok ? 'text-emerald-700 bg-emerald-50' : 'text-red-700 bg-red-50'}`}>
+                  {pushStatus.msg}
+                </p>
               )}
             </div>
             {unreadCount > 0 && (
