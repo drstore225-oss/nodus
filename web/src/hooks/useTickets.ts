@@ -116,8 +116,18 @@ export function useTicketStats() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tickets')
-        .select('status, sla_breached, priority, created_at, resolved_at');
+        .select('status, sla_breached, priority, created_at, resolved_at, deadline_at');
       if (error) throw error;
+
+      const now = new Date();
+
+      // Helper: chamado ativo (ainda não fechado)
+      const isActive = (t: typeof data[0]) =>
+        t.status === 'OPEN' || t.status === 'IN_PROGRESS';
+
+      // Helper: chamado expirado (prazo passou e ainda não foi resolvido/cancelado)
+      const isExpiredActive = (t: typeof data[0]) =>
+        isActive(t) && !!t.deadline_at && new Date(t.deadline_at) < now;
 
       // Basic counts
       const total = data.length;
@@ -125,27 +135,53 @@ export function useTicketStats() {
       const inProgress = data.filter((t) => t.status === 'IN_PROGRESS').length;
       const resolved = data.filter((t) => t.status === 'RESOLVED').length;
       const canceled = data.filter((t) => t.status === 'CANCELED').length;
-      const slaBreached = data.filter((t) => t.sla_breached).length;
-      const critical = data.filter(
-        (t) => t.priority === 'CRITICAL' && t.status !== 'RESOLVED' && t.status !== 'CANCELED'
+
+      // SLA estourado: inclui chamados já marcados no banco E chamados ativos com prazo vencido
+      const slaBreached = data.filter(
+        (t) => t.sla_breached || isExpiredActive(t)
       ).length;
 
-      // Resolution rate %
-      const closedTotal = resolved + canceled;
-      const resolutionRate = total > 0 ? Math.round((closedTotal / total) * 100) : 0;
+      const critical = data.filter(
+        (t) => t.priority === 'CRITICAL' && isActive(t)
+      ).length;
 
-      // Average resolution time (hours) for resolved tickets
+      // Taxa de resolução: apenas resolvidos são "sucesso"; expirados e cancelados são "falha"
+      // Fórmula: resolvidos / (resolvidos + cancelados + expirados ativos)
+      const expiredCount = data.filter(isExpiredActive).length;
+      const effectiveClosed = resolved; // apenas resolvidos contam como êxito
+      const effectiveTotal = resolved + canceled + expiredCount + open + inProgress;
+      // simplificando: total já contempla tudo, taxa = resolvidos / total
+      const resolutionRate = total > 0 ? Math.round((effectiveClosed / total) * 100) : 0;
+
+      // Tempo médio de resolução:
+      // - Chamados RESOLVED → usa resolved_at
+      // - Chamados expirados ativos → usa deadline_at como referência de encerramento
       const resolvedWithTime = data.filter(
         (t) => t.status === 'RESOLVED' && t.resolved_at && t.created_at
       );
+      const expiredWithTime = data.filter(
+        (t) => isExpiredActive(t) && t.deadline_at && t.created_at
+      );
+
+      const allClosedForAvg = [
+        ...resolvedWithTime.map((t) => ({
+          start: t.created_at,
+          end: t.resolved_at!,
+        })),
+        ...expiredWithTime.map((t) => ({
+          start: t.created_at,
+          end: t.deadline_at!,
+        })),
+      ];
+
       const avgResolutionHours =
-        resolvedWithTime.length > 0
+        allClosedForAvg.length > 0
           ? Math.round(
-              resolvedWithTime.reduce((acc, t) => {
+              allClosedForAvg.reduce((acc, t) => {
                 const diff =
-                  new Date(t.resolved_at!).getTime() - new Date(t.created_at).getTime();
+                  new Date(t.end).getTime() - new Date(t.start).getTime();
                 return acc + diff / 3_600_000;
-              }, 0) / resolvedWithTime.length
+              }, 0) / allClosedForAvg.length
             )
           : 0;
 
@@ -163,12 +199,13 @@ export function useTicketStats() {
         { name: 'Em Andamento', value: inProgress, fill: '#f59e0b' },
         { name: 'Resolvidos', value: resolved, fill: '#10b981' },
         { name: 'Cancelados', value: canceled, fill: '#94a3b8' },
+        { name: 'Expirados', value: expiredCount, fill: '#ef4444' },
       ];
 
       // Monthly trend — last 6 months
-      const now = new Date();
+      const now_trend = new Date();
       const monthlyTrend = Array.from({ length: 6 }, (_, i) => {
-        const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+        const d = new Date(now_trend.getFullYear(), now_trend.getMonth() - (5 - i), 1);
         const label = d.toLocaleString('pt-BR', { month: 'short' });
         const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         const abertos = data.filter(
@@ -186,6 +223,7 @@ export function useTicketStats() {
         inProgress,
         resolved,
         canceled,
+        expiredCount,
         slaBreached,
         critical,
         resolutionRate,

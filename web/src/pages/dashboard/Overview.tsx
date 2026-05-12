@@ -21,11 +21,11 @@ import {
   Clock,
   CheckCircle,
   AlertTriangle,
-  Flame,
   TrendingUp,
   Activity,
   Timer,
   ShieldCheck,
+  CalendarX,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -230,16 +230,18 @@ export const Overview: React.FC = () => {
           isLoading={isLoading}
           alert={(s?.slaBreached ?? 0) > 0}
           linkTo="/chamados"
+          sub="ativos vencidos + resolvidos no atraso"
         />
         <KpiCard
-          label="Críticos Abertos"
-          value={s?.critical}
-          icon={Flame}
-          iconBg="bg-orange-50"
-          iconColor="text-orange-600"
+          label="Expirados Ativos"
+          value={s?.expiredCount}
+          icon={CalendarX}
+          iconBg="bg-rose-50"
+          iconColor="text-rose-600"
           isLoading={isLoading}
-          alert={(s?.critical ?? 0) > 0}
+          alert={(s?.expiredCount ?? 0) > 0}
           linkTo="/chamados"
+          sub="prazo vencido, ainda em aberto"
         />
         <KpiCard
           label="Taxa de Resolução"
@@ -248,7 +250,7 @@ export const Overview: React.FC = () => {
           iconBg="bg-teal-50"
           iconColor="text-teal-600"
           isLoading={isLoading}
-          sub="chamados encerrados / total"
+          sub="resolvidos / total (expirados = falha)"
         />
         <KpiCard
           label="Tempo Médio"
@@ -257,7 +259,7 @@ export const Overview: React.FC = () => {
           iconBg="bg-violet-50"
           iconColor="text-violet-600"
           isLoading={isLoading}
-          sub="média de resolução"
+          sub="inclui expirados no cálculo"
         />
       </div>
 
