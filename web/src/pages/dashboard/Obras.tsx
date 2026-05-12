@@ -32,6 +32,9 @@ import {
   PauseCircle,
   XCircle,
   CalendarRange,
+  Briefcase,
+  Wrench,
+  Receipt,
 } from 'lucide-react';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -81,6 +84,8 @@ const emptyForm = {
   ends_at: '',
   responsible_name: '',
   responsible_contact: '',
+  executor_type: 'INTERNAL' as 'INTERNAL' | 'EXTERNAL',
+  materials_budget: '',
   public_notes: '',
 };
 
@@ -132,13 +137,25 @@ const ObraCard: React.FC<ObraCardProps> = ({ obra, onEdit, onQr, canManage }) =>
           <p className="text-xs text-slate-500 mb-3 line-clamp-2">{obra.description}</p>
         )}
 
-        {/* Date range */}
-        <div className="flex items-center gap-2 mb-4 bg-slate-50 rounded-lg p-2.5">
-          <Calendar className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
-          <span className="text-xs text-slate-600 font-medium">
-            {range.start} → {range.end}
-          </span>
-          <span className="text-xs text-slate-400 ml-auto">{range.duration}</span>
+        {/* Date range & Executor */}
+        <div className="flex flex-col gap-2 mb-4 bg-slate-50 rounded-lg p-2.5">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+            <span className="text-xs text-slate-600 font-medium">
+              {range.start} → {range.end}
+            </span>
+            <span className="text-xs text-slate-400 ml-auto">{range.duration}</span>
+          </div>
+          <div className="flex items-center gap-2 pt-2 mt-1 border-t border-slate-200/60">
+            {obra.executor_type === 'INTERNAL' ? (
+              <Wrench className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+            ) : (
+              <Briefcase className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+            )}
+            <span className="text-xs text-slate-600">
+              Execução: <span className="font-medium">{obra.executor_type === 'INTERNAL' ? 'Manutenção Local' : 'Empresa Terceirizada'}</span>
+            </span>
+          </div>
         </div>
 
         {/* Responsible */}
@@ -339,16 +356,47 @@ const ObraForm: React.FC<ObraFormProps> = ({ initial, onSubmit, onCancel, isLoad
           </div>
         </div>
 
-        {/* Responsável */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* Responsável & Executor */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label className={labelCls}>Responsável</label>
+            <label className={labelCls}>Quem executa?</label>
+            <div className="relative">
+              <select
+                className={`${inputCls} pr-8 appearance-none`}
+                value={form.executor_type}
+                onChange={(e) => set('executor_type', e.target.value)}
+              >
+                <option value="INTERNAL">Manutenção Local</option>
+                <option value="EXTERNAL">Empresa Terceirizada</option>
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+            </div>
+          </div>
+          <div>
+            <label className={labelCls}>Nome do Responsável</label>
             <input className={inputCls} value={form.responsible_name} onChange={(e) => set('responsible_name', e.target.value)} placeholder="Nome" />
           </div>
           <div>
-            <label className={labelCls}>Contato</label>
+            <label className={labelCls}>Contato do Responsável</label>
             <input className={inputCls} value={form.responsible_contact} onChange={(e) => set('responsible_contact', e.target.value)} placeholder="Tel / e-mail" />
           </div>
+        </div>
+
+        {/* Materiais e Orçamento */}
+        <div>
+          <label className={labelCls}>
+            <span className="flex items-center gap-1.5">
+              <Receipt className="h-3.5 w-3.5 text-slate-400" />
+              Lista de Materiais e Orçamento (Apenas uso interno)
+            </span>
+          </label>
+          <textarea
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-white"
+            rows={4}
+            value={form.materials_budget}
+            onChange={(e) => set('materials_budget', e.target.value)}
+            placeholder="Ex: 50 sacos de cimento (R$ 1.500)&#10;Mão de obra contratada (R$ 5.000)&#10;Total previsto: R$ 6.500"
+          />
         </div>
 
         {/* Aviso público */}
@@ -567,6 +615,8 @@ export const ObrasPage: React.FC = () => {
               location: editObra.location ?? '',
               responsible_name: editObra.responsible_name ?? '',
               responsible_contact: editObra.responsible_contact ?? '',
+              executor_type: editObra.executor_type,
+              materials_budget: editObra.materials_budget ?? '',
               public_notes: editObra.public_notes ?? '',
             }}
             onSubmit={handleUpdate}

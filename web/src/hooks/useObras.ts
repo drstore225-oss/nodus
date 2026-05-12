@@ -14,6 +14,8 @@ export interface Obra {
   ends_at: string;
   responsible_name: string | null;
   responsible_contact: string | null;
+  executor_type: 'INTERNAL' | 'EXTERNAL';
+  materials_budget: string | null;
   public_notes: string | null;
   created_by: string | null;
   created_at: string;
