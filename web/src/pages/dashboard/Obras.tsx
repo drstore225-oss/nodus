@@ -420,7 +420,7 @@ export const ObrasPage: React.FC = () => {
       ...form,
       institution_id: profile.institution_id,
       created_by: user!.id,
-      starts_at: new Date(form.starts_at).toISOString(),
+      starts_at: new Date(form.starts_at + 'T00:00:00').toISOString(),
       ends_at: new Date(form.ends_at + 'T23:59:59').toISOString(),
     });
     setIsCreateOpen(false);
@@ -431,7 +431,7 @@ export const ObrasPage: React.FC = () => {
     await updateMutation.mutateAsync({
       id: editObra.id,
       ...form,
-      starts_at: new Date(form.starts_at).toISOString(),
+      starts_at: new Date(form.starts_at + 'T00:00:00').toISOString(),
       ends_at: new Date(form.ends_at + 'T23:59:59').toISOString(),
     });
     setEditObra(null);
@@ -561,8 +561,8 @@ export const ObrasPage: React.FC = () => {
             mode="edit"
             initial={{
               ...editObra,
-              starts_at: editObra.starts_at.slice(0, 10),
-              ends_at: editObra.ends_at.slice(0, 10),
+              starts_at: format(parseISO(editObra.starts_at), 'yyyy-MM-dd'),
+              ends_at: format(parseISO(editObra.ends_at), 'yyyy-MM-dd'),
               description: editObra.description ?? '',
               location: editObra.location ?? '',
               responsible_name: editObra.responsible_name ?? '',
