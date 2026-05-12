@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTickets, useCreateTicket } from '../../hooks/useTickets';
 import type { TicketFilters, TicketType } from '../../hooks/useTickets';
+import { useObras } from '../../hooks/useObras';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUsers } from '../../hooks/useUsers';
 import type { TicketStatus, TicketPriority } from '../../types/database.types';
@@ -61,6 +62,7 @@ export const TicketsPage: React.FC = () => {
   };
 
   const { data: tickets = [], isLoading } = useTickets(filters);
+  const { data: obras = [] } = useObras(profile?.institution_id ?? undefined);
   const createMutation = useCreateTicket();
 
   const handleCreate = async (data: any) => {
@@ -222,7 +224,8 @@ export const TicketsPage: React.FC = () => {
         </div>
       ) : (
         <TicketsCalendar 
-          tickets={tickets} 
+          tickets={tickets}
+          obras={obras}
           onTicketClick={setSelectedTicketId} 
           onDayDoubleClick={(date) => {
             setSelectedDate(date);

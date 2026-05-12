@@ -149,8 +149,7 @@ export function useTicketStats() {
       // Fórmula: resolvidos / (resolvidos + cancelados + expirados ativos)
       const expiredCount = data.filter(isExpiredActive).length;
       const effectiveClosed = resolved; // apenas resolvidos contam como êxito
-      const effectiveTotal = resolved + canceled + expiredCount + open + inProgress;
-      // simplificando: total já contempla tudo, taxa = resolvidos / total
+      // taxa = resolvidos / total (expirados e cancelados = falha)
       const resolutionRate = total > 0 ? Math.round((effectiveClosed / total) * 100) : 0;
 
       // Tempo médio de resolução:

@@ -16,17 +16,20 @@ import {
   parseISO,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, X, Plus, ArrowRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Plus, ArrowRight, HardHat } from 'lucide-react';
 import type { Ticket } from '../../hooks/useTickets';
+import type { Obra } from '../../hooks/useObras';
+import { obraStatusColors, obraStatusLabels } from '../../hooks/useObras';
 
 interface TicketsCalendarProps {
   tickets: Ticket[];
+  obras?: Obra[];
   onTicketClick: (ticketId: string) => void;
   onDayClick?: (date: Date) => void;
   onDayDoubleClick?: (date: Date) => void;
 }
 
-export const TicketsCalendar: React.FC<TicketsCalendarProps> = ({ tickets, onTicketClick, onDayClick, onDayDoubleClick }) => {
+export const TicketsCalendar: React.FC<TicketsCalendarProps> = ({ tickets, obras = [], onTicketClick, onDayClick, onDayDoubleClick }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dayListDate, setDayListDate] = useState<Date | null>(null);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -47,17 +50,23 @@ export const TicketsCalendar: React.FC<TicketsCalendarProps> = ({ tickets, onTic
   const getTicketsForDay = (day: Date) => {
     return tickets.filter((ticket) => {
       if (ticket.scheduled_at && ticket.deadline_at) {
-        // Ticket has a date range
         const start = startOfDay(parseISO(ticket.scheduled_at));
         const end = endOfDay(parseISO(ticket.deadline_at));
         return isWithinInterval(day, { start, end });
       } else {
-        // Single date
         const ticketDateStr = ticket.scheduled_at || ticket.deadline_at || ticket.created_at;
         if (!ticketDateStr) return false;
         const ticketDate = parseISO(ticketDateStr);
         return isSameDay(ticketDate, day);
       }
+    });
+  };
+
+  const getObrasForDay = (day: Date) => {
+    return obras.filter((obra) => {
+      const start = startOfDay(parseISO(obra.starts_at));
+      const end = endOfDay(parseISO(obra.ends_at));
+      return isWithinInterval(day, { start, end });
     });
   };
 
@@ -86,6 +95,7 @@ export const TicketsCalendar: React.FC<TicketsCalendarProps> = ({ tickets, onTic
       formattedDate = format(day, 'd');
       const cloneDay = day;
       const dayTickets = getTicketsForDay(cloneDay);
+      const dayObras = getObrasForDay(cloneDay);
       const isCurrentMonth = isSameMonth(day, monthStart);
       const isToday = isSameDay(day, new Date());
       const isSelected = dayListDate !== null && isSameDay(cloneDay, dayListDate);
@@ -94,52 +104,77 @@ export const TicketsCalendar: React.FC<TicketsCalendarProps> = ({ tickets, onTic
         <div
           key={day.toString()}
           onClick={(e) => handleDayClick(e, cloneDay)}
-          className={`min-h-[120px] p-2 border-b border-r border-slate-200 transition-colors cursor-pointer ${
+          className={`min-h-[120px] p-2 border-b border-r border-slate-200 transition-colors cursor-pointer relative ${
             isSelected ? 'ring-2 ring-inset ring-blue-500' : ''
           } ${
             !isCurrentMonth ? 'bg-slate-50 text-slate-400 hover:bg-slate-100' : 'bg-white text-slate-700 hover:bg-slate-50'
           } ${isToday ? 'bg-blue-50/50 hover:bg-blue-100/50' : ''}`}
           title="Clique para ver chamados • Duplo clique para novo chamado"
         >
-          <div className="flex justify-between items-center mb-2">
-            <span
-              className={`text-sm font-semibold w-7 h-7 flex items-center justify-center rounded-full ${
-                isToday ? 'bg-blue-600 text-white' : ''
-              }`}
-            >
-              {formattedDate}
-            </span>
-            {dayTickets.length > 0 && (
-              <span className="text-xs font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
-                {dayTickets.length}
-              </span>
-            )}
-          </div>
-          <div className="space-y-1.5 overflow-y-auto max-h-[80px] custom-scrollbar">
-            {dayTickets.map((ticket) => (
-              <div
-                key={ticket.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTicketClick(ticket.id);
-                }}
-                className={`ticket-item text-xs p-1.5 rounded cursor-pointer border-l-2 hover:opacity-80 transition-opacity truncate ${
-                  ticket.priority === 'CRITICAL'
-                    ? 'bg-red-50 border-red-500 text-red-700'
-                    : ticket.priority === 'HIGH'
-                    ? 'bg-orange-50 border-orange-500 text-orange-700'
-                    : ticket.priority === 'MEDIUM'
-                    ? 'bg-blue-50 border-blue-500 text-blue-700'
-                    : 'bg-slate-100 border-slate-400 text-slate-700'
+          {/* Obra background highlight */}
+          {dayObras.length > 0 && (
+            <div className="absolute inset-0 bg-amber-50/60 border-l-2 border-amber-400 pointer-events-none" />
+          )}
+          <div className="relative">
+            <div className="flex justify-between items-center mb-2">
+              <span
+                className={`text-sm font-semibold w-7 h-7 flex items-center justify-center rounded-full ${
+                  isToday ? 'bg-blue-600 text-white' : ''
                 }`}
-                title={ticket.title}
               >
-                <div className="flex items-center gap-1 font-semibold truncate">
-                  {ticket.ticket_type === 'PREVENTIVE' && <span className="px-1 bg-white/50 rounded uppercase text-[9px] border border-current opacity-70">Prev</span>}
-                  <span className="truncate">{ticket.title}</span>
+                {formattedDate}
+              </span>
+              {(dayTickets.length > 0 || dayObras.length > 0) && (
+                <span className="text-xs font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
+                  {dayTickets.length + dayObras.length}
+                </span>
+              )}
+            </div>
+            <div className="space-y-1.5 overflow-y-auto max-h-[80px] custom-scrollbar">
+              {/* Obras */}
+              {dayObras.map((obra) => {
+                const c = obraStatusColors[obra.status];
+                return (
+                  <a
+                    key={`obra-${obra.id}`}
+                    href={`/obra/${obra.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className={`obra-item flex items-center gap-1 text-xs p-1.5 rounded font-semibold truncate ${c.bg} ${c.text} hover:opacity-80 transition-opacity`}
+                    title={obra.title}
+                  >
+                    <HardHat className="h-3 w-3 flex-shrink-0" />
+                    <span className="truncate">{obra.title}</span>
+                  </a>
+                );
+              })}
+              {/* Tickets */}
+              {dayTickets.map((ticket) => (
+                <div
+                  key={ticket.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTicketClick(ticket.id);
+                  }}
+                  className={`ticket-item text-xs p-1.5 rounded cursor-pointer border-l-2 hover:opacity-80 transition-opacity truncate ${
+                    ticket.priority === 'CRITICAL'
+                      ? 'bg-red-50 border-red-500 text-red-700'
+                      : ticket.priority === 'HIGH'
+                      ? 'bg-orange-50 border-orange-500 text-orange-700'
+                      : ticket.priority === 'MEDIUM'
+                      ? 'bg-blue-50 border-blue-500 text-blue-700'
+                      : 'bg-slate-100 border-slate-400 text-slate-700'
+                  }`}
+                  title={ticket.title}
+                >
+                  <div className="flex items-center gap-1 font-semibold truncate">
+                    {ticket.ticket_type === 'PREVENTIVE' && <span className="px-1 bg-white/50 rounded uppercase text-[9px] border border-current opacity-70">Prev</span>}
+                    <span className="truncate">{ticket.title}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       );
@@ -149,6 +184,7 @@ export const TicketsCalendar: React.FC<TicketsCalendarProps> = ({ tickets, onTic
 
   const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
   const selectedDayTickets = dayListDate ? getTicketsForDay(dayListDate) : [];
+  const selectedDayObras = dayListDate ? getObrasForDay(dayListDate) : [];
 
   return (
     <div className="space-y-4">
@@ -204,11 +240,12 @@ export const TicketsCalendar: React.FC<TicketsCalendarProps> = ({ tickets, onTic
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
             <div>
               <h3 className="text-base font-bold text-slate-800">
-                Chamados em {format(dayListDate, "dd 'de' MMMM", { locale: ptBR })}
+                {format(dayListDate, "dd 'de' MMMM", { locale: ptBR })}
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
+                {selectedDayObras.length > 0 && `${selectedDayObras.length} obra${selectedDayObras.length !== 1 ? 's' : ''} • `}
                 {selectedDayTickets.length === 0
-                  ? 'Nenhum chamado neste dia'
+                  ? 'Nenhum chamado'
                   : `${selectedDayTickets.length} chamado${selectedDayTickets.length !== 1 ? 's' : ''}`}
               </p>
             </div>
@@ -228,6 +265,39 @@ export const TicketsCalendar: React.FC<TicketsCalendarProps> = ({ tickets, onTic
               </button>
             </div>
           </div>
+
+          {/* Obras section in panel */}
+          {selectedDayObras.length > 0 && (
+            <div className="border-b border-slate-100">
+              <div className="px-6 py-2 bg-amber-50">
+                <p className="text-xs font-bold text-amber-700 uppercase tracking-wide flex items-center gap-1.5">
+                  <HardHat className="h-3.5 w-3.5" />
+                  Obras neste período
+                </p>
+              </div>
+              {selectedDayObras.map((obra) => {
+                const c = obraStatusColors[obra.status];
+                return (
+                  <a
+                    key={obra.id}
+                    href={`/obra/${obra.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 px-6 py-3 hover:bg-amber-50 transition-colors"
+                  >
+                    <HardHat className={`h-4 w-4 ${c.text} flex-shrink-0`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{obra.title}</p>
+                      {obra.location && <p className="text-xs text-slate-400 truncate">{obra.location}</p>}
+                    </div>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${c.bg} ${c.text}`}>
+                      {obraStatusLabels[obra.status]}
+                    </span>
+                  </a>
+                );
+              })}
+            </div>
+          )}
 
           {selectedDayTickets.length === 0 ? (
             <div className="px-6 py-10 text-center text-slate-400 text-sm">

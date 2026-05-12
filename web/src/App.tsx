@@ -10,10 +10,12 @@ import { UsersPage } from './pages/dashboard/Users';
 import { TeamsPage } from './pages/dashboard/Teams';
 import { CostCentersPage } from './pages/dashboard/CostCenters';
 import { TicketsPage } from './pages/dashboard/Tickets';
+import { ObrasPage } from './pages/dashboard/Obras';
 import { SettingsPage } from './pages/dashboard/Settings';
 import { MaintenancePlans } from './pages/dashboard/MaintenancePlans';
 import { PublicTicket } from './pages/public/PublicTicket';
 import { TicketTracking } from './pages/public/TicketTracking';
+import { PublicObra } from './pages/public/PublicObra';
 
 
 
@@ -36,6 +38,7 @@ function App() {
 
             <Route path="/chamado-publico/:institutionId" element={<PublicTicket />} />
             <Route path="/acompanhar/:ticketId" element={<TicketTracking />} />
+            <Route path="/obra/:obraId" element={<PublicObra />} />
 
             {/* Rotas Privadas */}
             <Route
@@ -48,6 +51,7 @@ function App() {
             >
               <Route index element={<Overview />} />
               <Route path="chamados" element={<TicketsPage />} />
+              <Route path="obras" element={<ObrasPage />} />
               <Route path="planos-manutencao" element={<MaintenancePlans />} />
               <Route path="institucoes" element={<Institutions />} />
               <Route path="equipes" element={<TeamsPage />} />

@@ -17,6 +17,7 @@ import {
   Clock,
   Activity,
   Layers,
+  HardHat,
 } from 'lucide-react';
 
 export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -69,6 +70,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/chamados', label: 'Chamados', icon: Ticket },
+  { to: '/obras', label: 'Obras', icon: HardHat, roles: ['SUPERADMIN', 'ADMIN', 'GESTOR', 'TECNICO'] },
   { to: '/institucoes', label: 'Instituições', icon: Building2, roles: ['SUPERADMIN', 'ADMIN'] },
   { to: '/planos-manutencao', label: 'Rotinas', icon: Activity, roles: ['SUPERADMIN', 'ADMIN', 'GESTOR'] },
   { to: '/equipes', label: 'Equipes', icon: UsersRound, roles: ['SUPERADMIN', 'ADMIN', 'GESTOR'] },
