@@ -51,6 +51,7 @@ export type TicketFilters = {
   ticketType?: TicketType;
   assigneeId?: string;
   slaBreached?: boolean;
+  category?: string;
   search?: string;
 };
 
@@ -73,6 +74,7 @@ export function useTickets(filters?: TicketFilters) {
       if (filters?.priority) query = query.eq('priority', filters.priority);
       if (filters?.ticketType) query = query.eq('ticket_type', filters.ticketType);
       if (filters?.assigneeId) query = query.eq('assigned_to', filters.assigneeId);
+      if (filters?.category) query = query.eq('category', filters.category);
       if (filters?.slaBreached !== undefined) query = query.eq('sla_breached', filters.slaBreached);
       if (filters?.search) {
         query = query.or(`title.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);

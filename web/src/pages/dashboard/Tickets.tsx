@@ -36,6 +36,21 @@ const TYPE_OPTIONS: { value: TicketType | ''; label: string }[] = [
   { value: 'PREVENTIVE', label: 'Preventiva' },
 ];
 
+const CATEGORY_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'Todas as Etiquetas' },
+  { value: 'Elétrica', label: 'Elétrica' },
+  { value: 'Hidráulica', label: 'Hidráulica' },
+  { value: 'Civil', label: 'Civil' },
+  { value: 'Climatização', label: 'Climatização' },
+  { value: 'Tecnologia', label: 'Tecnologia' },
+  { value: 'Segurança', label: 'Segurança' },
+  { value: 'Limpeza', label: 'Limpeza' },
+  { value: 'Jardinagem', label: 'Jardinagem' },
+  { value: 'Equipamentos', label: 'Equipamentos' },
+  { value: 'Outros', label: 'Outros' },
+];
+
+
 export const TicketsPage: React.FC = () => {
   const { profile, user } = useAuth();
   const { data: users = [] } = useUsers(profile?.institution_id ?? undefined);
@@ -48,6 +63,7 @@ export const TicketsPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<TicketStatus | ''>('');
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | ''>('');
   const [typeFilter, setTypeFilter] = useState<TicketType | ''>('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [assigneeFilter, setAssigneeFilter] = useState<string>('');
   const [slaFilter, setSlaFilter] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
@@ -56,6 +72,7 @@ export const TicketsPage: React.FC = () => {
     ...(statusFilter ? { status: statusFilter } : {}),
     ...(priorityFilter ? { priority: priorityFilter } : {}),
     ...(typeFilter ? { ticketType: typeFilter } : {}),
+    ...(categoryFilter ? { category: categoryFilter } : {}),
     ...(assigneeFilter ? { assigneeId: assigneeFilter } : {}),
     ...(slaFilter ? { slaBreached: true } : {}),
     ...(search ? { search } : {}),
@@ -88,7 +105,7 @@ export const TicketsPage: React.FC = () => {
   };
 
   const technicianUsers = users.filter((u) => u.role === 'TECNICO' || u.role === 'GESTOR');
-  const activeFiltersCount = [statusFilter, priorityFilter, typeFilter, assigneeFilter, slaFilter].filter(Boolean).length;
+  const activeFiltersCount = [statusFilter, priorityFilter, typeFilter, categoryFilter, assigneeFilter, slaFilter].filter(Boolean).length;
 
   return (
     <div className="space-y-6">
@@ -169,6 +186,16 @@ export const TicketsPage: React.FC = () => {
           className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {TYPE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          {CATEGORY_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
