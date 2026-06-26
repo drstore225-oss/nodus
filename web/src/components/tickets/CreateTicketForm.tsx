@@ -5,6 +5,7 @@ import * as z from 'zod';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTeams } from '../../hooks/useTeams';
 import { useCostCenters } from '../../hooks/useCostCenters';
+import { useBuildings } from '../../hooks/useBuildings';
 import { Input } from '../ui/Input';
 import { Label } from '../ui/Label';
 import { Button } from '../ui/Button';
@@ -18,6 +19,7 @@ const ticketSchema = z.object({
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
   ticket_type: z.enum(['CORRECTIVE', 'PREVENTIVE']),
   category: z.string().optional(),
+  building_id: z.string().optional(),
   team_id: z.string().optional(),
   cost_center_id: z.string().optional(),
   scheduled_at: z.string().optional(),
@@ -70,6 +72,7 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
   const { profile } = useAuth();
   const { data: teams = [] } = useTeams(profile?.institution_id ?? undefined);
   const { data: costCenters = [] } = useCostCenters(profile?.institution_id ?? undefined);
+  const { data: buildings = [] } = useBuildings(profile?.institution_id ?? undefined);
 
   const { register, handleSubmit, formState: { errors } } = useForm<TicketFormValues>({
     resolver: zodResolver(ticketSchema),
@@ -167,6 +170,20 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
               type="datetime-local"
               error={errors.deadline_at?.message}
               {...register('deadline_at')}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <Label htmlFor="building_id">Prédio / Edifício</Label>
+          <div className="mt-1">
+            <Select
+              id="building_id"
+              placeholder="Nenhum prédio"
+              options={buildings.map((b) => ({ value: b.id, label: `${b.name} (${parseFloat(b.total_m2.toString()).toLocaleString('pt-BR')} m²)` }))}
+              {...register('building_id')}
             />
           </div>
         </div>

@@ -18,11 +18,24 @@ export interface Obra {
   materials_budget: string | null;
   public_notes: string | null;
   created_by: string | null;
+  building_id?: string | null;
+  project_description?: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export type ObraInsert = Omit<Obra, 'id' | 'created_at' | 'updated_at'>;
+
+export interface ObraFile {
+  id: string;
+  obra_id: string;
+  file_name: string;
+  file_url: string;
+  file_type: 'BLUEPRINT' | 'IDEA_GALLERY';
+  created_at: string;
+}
+
+export type ObraFileInsert = Omit<ObraFile, 'id' | 'created_at'>;
 
 export const obraStatusLabels: Record<ObraStatus, string> = {
   PLANNED: 'Planejada',
@@ -120,6 +133,57 @@ export function useDeleteObra() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['obras'] });
+    },
+  });
+}
+
+export function useObraFiles(obraId?: string | null) {
+  return useQuery({
+    queryKey: ['obra_files', obraId],
+    queryFn: async () => {
+      if (!obraId) return [];
+      const { data, error } = await supabase
+        .from('obra_files')
+        .select('*')
+        .eq('obra_id', obraId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as ObraFile[];
+    },
+    enabled: !!obraId,
+  });
+}
+
+export function useAddObraFile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: ObraFileInsert) => {
+      const { data, error } = await supabase
+        .from('obra_files')
+        .insert(file)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as ObraFile;
+    },
+    onSuccess: (data) => {
+      if (data) {
+        queryClient.invalidateQueries({ queryKey: ['obra_files', data.obra_id] });
+      }
+    },
+  });
+}
+
+export function useDeleteObraFile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, obraId }: { id: string; obraId: string }) => {
+      const { error } = await supabase.from('obra_files').delete().eq('id', id);
+      if (error) throw error;
+      return { id, obraId };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['obra_files', data.obraId] });
     },
   });
 }

@@ -5,12 +5,90 @@ import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Label } from '../../components/ui/Label';
-import { Building2, KeyRound, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
+import {
+  Building2,
+  KeyRound,
+  Save,
+  AlertCircle,
+  CheckCircle2,
+  Plus,
+  Trash2,
+  Pencil,
+  X
+} from 'lucide-react';
+import {
+  useBuildings,
+  useCreateBuilding,
+  useUpdateBuilding,
+  useDeleteBuilding
+} from '../../hooks/useBuildings';
 
 export const SettingsPage: React.FC = () => {
   const { profile } = useAuth();
   const { data: institution, isLoading: isInstLoading } = useInstitution(profile?.institution_id || '');
   const updateInstitutionMutation = useUpdateInstitution();
+
+  // Gemini API Key State
+  const [geminiKey, setGeminiKey] = useState(localStorage.getItem('nodus_gemini_api_key') || '');
+
+  // Buildings State & Hooks
+  const { data: buildings = [], isLoading: isBuildingsLoading } = useBuildings(profile?.institution_id);
+  const createBuildingMutation = useCreateBuilding();
+  const updateBuildingMutation = useUpdateBuilding();
+  const deleteBuildingMutation = useDeleteBuilding();
+
+  const [isAddingBuilding, setIsAddingBuilding] = useState(false);
+  const [newBuildingData, setNewBuildingData] = useState({ name: '', total_m2: 0, floors: 1 });
+  const [editingBuildingId, setEditingBuildingId] = useState<string | null>(null);
+  const [editBuildingData, setEditBuildingData] = useState({ name: '', total_m2: 0, floors: 1 });
+
+  const handleCreateBuilding = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile?.institution_id || !newBuildingData.name || !newBuildingData.total_m2) return;
+    try {
+      await createBuildingMutation.mutateAsync({
+        institution_id: profile.institution_id,
+        name: newBuildingData.name,
+        total_m2: newBuildingData.total_m2,
+        floors: newBuildingData.floors || 1,
+      });
+      setNewBuildingData({ name: '', total_m2: 0, floors: 1 });
+      setIsAddingBuilding(false);
+    } catch (error: any) {
+      alert('Erro ao criar prédio: ' + error.message);
+    }
+  };
+
+  const startEditingBuilding = (b: any) => {
+    setEditingBuildingId(b.id);
+    setEditBuildingData({ name: b.name, total_m2: parseFloat(b.total_m2), floors: b.floors || 1 });
+  };
+
+  const handleSaveEditBuilding = async () => {
+    if (!editingBuildingId) return;
+    try {
+      await updateBuildingMutation.mutateAsync({
+        id: editingBuildingId,
+        name: editBuildingData.name,
+        total_m2: editBuildingData.total_m2,
+        floors: editBuildingData.floors,
+      });
+      setEditingBuildingId(null);
+    } catch (error: any) {
+      alert('Erro ao atualizar prédio: ' + error.message);
+    }
+  };
+
+  const handleDeleteBuilding = async (id: string) => {
+    if (!profile?.institution_id) return;
+    if (confirm('Tem certeza que deseja excluir este prédio? Todos os chamados e obras vinculados perderão a referência.')) {
+      try {
+        await deleteBuildingMutation.mutateAsync({ id, institutionId: profile.institution_id });
+      } catch (error: any) {
+        alert('Erro ao excluir prédio: ' + error.message);
+      }
+    }
+  };
 
   // Institution State
   const [instData, setInstData] = useState({
@@ -111,6 +189,39 @@ export const SettingsPage: React.FC = () => {
             <h3 className="font-semibold text-slate-800 mb-3 border-b border-slate-100 pb-2">Meu Perfil</h3>
             <p className="text-sm text-slate-600 mb-1"><span className="font-medium text-slate-700">Função:</span> {profile?.role}</p>
             <p className="text-sm text-slate-600"><span className="font-medium text-slate-700">ID:</span> {profile?.id.split('-')[0]}...</p>
+          </div>
+
+          {/* Configuração da Chave da API do Gemini */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <h3 className="font-semibold text-slate-800 mb-3 border-b border-slate-100 pb-2 flex items-center gap-2">
+              <KeyRound className="h-4 w-4 text-purple-600" />
+              Nodus AI (Gemini)
+            </h3>
+            <p className="text-xs text-slate-500 mb-3">
+              Insira sua API Key do Gemini para ativar análises inteligentes avançadas no Chatbot.
+            </p>
+            <div className="space-y-3">
+              <input
+                type="password"
+                placeholder="Insira sua Gemini Key..."
+                className="w-full text-xs h-9 rounded-lg border border-slate-300 px-3 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                value={geminiKey}
+                onChange={(e) => {
+                  setGeminiKey(e.target.value);
+                  localStorage.setItem('nodus_gemini_api_key', e.target.value);
+                }}
+              />
+              {geminiKey ? (
+                <p className="text-[10px] text-emerald-600 flex items-center gap-1 font-semibold">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Chave configurada e ativa
+                </p>
+              ) : (
+                <p className="text-[10px] text-slate-400">
+                  Modo Analítico Local ativo (sem custo)
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -280,6 +391,155 @@ export const SettingsPage: React.FC = () => {
                       </Button>
                     </div>
                   </form>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Seção Prédios */}
+          {profile?.institution_id && (
+            <section className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+              <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-blue-600" />
+                  <h2 className="font-semibold text-slate-800">Prédios e Metragens (m²)</h2>
+                </div>
+                {canEditInstitution && (
+                  <Button size="sm" onClick={() => setIsAddingBuilding(true)}>
+                    <Plus className="h-4 w-4 mr-1" /> Add Prédio
+                  </Button>
+                )}
+              </div>
+              
+              <div className="p-6">
+                {/* Form para adicionar prédio */}
+                {isAddingBuilding && (
+                  <form onSubmit={handleCreateBuilding} className="bg-slate-50 rounded-xl p-4 border border-slate-200 mb-6 space-y-4">
+                    <h3 className="text-sm font-semibold text-slate-700">Novo Prédio</h3>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="b_name">Nome do Prédio *</Label>
+                        <Input
+                          id="b_name"
+                          value={newBuildingData.name}
+                          onChange={(e) => setNewBuildingData({ ...newBuildingData, name: e.target.value })}
+                          placeholder="Ex: Bloco Administrativo"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="b_m2">Metragem Quadrada (m²) *</Label>
+                        <Input
+                          id="b_m2"
+                          type="number"
+                          value={newBuildingData.total_m2 || ''}
+                          onChange={(e) => setNewBuildingData({ ...newBuildingData, total_m2: parseFloat(e.target.value) })}
+                          placeholder="Ex: 1200"
+                          min="0.1"
+                          step="any"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="b_floors">Andares</Label>
+                        <Input
+                          id="b_floors"
+                          type="number"
+                          value={newBuildingData.floors || ''}
+                          onChange={(e) => setNewBuildingData({ ...newBuildingData, floors: parseInt(e.target.value) })}
+                          placeholder="Ex: 3"
+                          min="1"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => setIsAddingBuilding(false)}>Cancelar</Button>
+                      <Button type="submit" size="sm">Salvar</Button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Listagem de prédios */}
+                {isBuildingsLoading ? (
+                  <div className="flex justify-center p-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+                  </div>
+                ) : buildings.length === 0 ? (
+                  <p className="text-sm text-slate-500 text-center py-6">Nenhum prédio cadastrado para esta organização.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left text-slate-500">
+                      <thead className="text-xs text-slate-700 uppercase bg-slate-100">
+                        <tr>
+                          <th className="px-4 py-3">Nome</th>
+                          <th className="px-4 py-3">Área (m²)</th>
+                          <th className="px-4 py-3">Andares</th>
+                          {canEditInstitution && <th className="px-4 py-3 text-right">Ações</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {buildings.map((b: any) => (
+                          <tr key={b.id} className="hover:bg-slate-50">
+                            <td className="px-4 py-3 font-medium text-slate-900">
+                              {editingBuildingId === b.id ? (
+                                <Input
+                                  value={editBuildingData.name}
+                                  onChange={(e) => setEditBuildingData({ ...editBuildingData, name: e.target.value })}
+                                />
+                              ) : (
+                                b.name
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-slate-700">
+                              {editingBuildingId === b.id ? (
+                                <Input
+                                  type="number"
+                                  value={editBuildingData.total_m2 || ''}
+                                  onChange={(e) => setEditBuildingData({ ...editBuildingData, total_m2: parseFloat(e.target.value) })}
+                                />
+                              ) : (
+                                `${parseFloat(b.total_m2).toLocaleString('pt-BR')} m²`
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-slate-700">
+                              {editingBuildingId === b.id ? (
+                                <Input
+                                  type="number"
+                                  value={editBuildingData.floors || ''}
+                                  onChange={(e) => setEditBuildingData({ ...editBuildingData, floors: parseInt(e.target.value) })}
+                                />
+                              ) : (
+                                b.floors || 1
+                              )}
+                            </td>
+                            {canEditInstitution && (
+                              <td className="px-4 py-3 text-right">
+                                {editingBuildingId === b.id ? (
+                                  <div className="flex justify-end gap-1.5">
+                                    <button type="button" onClick={handleSaveEditBuilding} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded" title="Salvar">
+                                      <Save className="h-4 w-4" />
+                                    </button>
+                                    <button type="button" onClick={() => setEditingBuildingId(null)} className="p-1 text-red-600 hover:bg-red-50 rounded" title="Cancelar">
+                                      <X className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex justify-end gap-1.5">
+                                    <button type="button" onClick={() => startEditingBuilding(b)} className="p-1 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded" title="Editar">
+                                      <Pencil className="h-4 w-4" />
+                                    </button>
+                                    <button type="button" onClick={() => handleDeleteBuilding(b.id)} className="p-1 text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded" title="Excluir">
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             </section>

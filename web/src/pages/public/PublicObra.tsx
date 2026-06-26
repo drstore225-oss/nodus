@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { format, parseISO, differenceInDays, isPast, isFuture } from 'date-fns';
+import { format, parseISO, differenceInDays, isPast, isFuture, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabase } from '../../lib/supabase';
 import type { ObraStatus } from '../../hooks/useObras';
@@ -90,9 +90,15 @@ function getProgressLabel(starts: string, ends: string, status: ObraStatus): str
   if (status === 'COMPLETED') return 'Concluída';
   if (status === 'CANCELED') return 'Cancelada';
   if (status === 'PAUSED') return 'Pausada';
-  const now = new Date();
-  const s = parseISO(starts);
-  const e = parseISO(ends);
+  const now = startOfDay(new Date());
+  const s = startOfDay(parseISO(starts));
+  const e = startOfDay(parseISO(ends));
+  
+  if (status === 'IN_PROGRESS' && now > e) {
+    const days = differenceInDays(now, e);
+    return `Prazo encerrado (atrasada há ${days} dia${days !== 1 ? 's' : ''})`;
+  }
+
   if (isFuture(s)) {
     const daysUntil = differenceInDays(s, now);
     return `Inicia em ${daysUntil} dia${daysUntil !== 1 ? 's' : ''}`;
@@ -151,8 +157,26 @@ export const PublicObra: React.FC = () => {
     );
   }
 
-  const colors = obraStatusColors[obra.status];
-  const banner = statusBanners[obra.status];
+  const now = startOfDay(new Date());
+  const end = startOfDay(parseISO(obra.ends_at));
+  const daysDelayed = differenceInDays(now, end);
+  const isDelayed = obra.status === 'IN_PROGRESS' && daysDelayed > 0;
+
+  const colors = isDelayed
+    ? { bg: 'bg-red-100', text: 'text-red-700', dot: 'bg-red-500' }
+    : obraStatusColors[obra.status];
+
+  const banner = isDelayed
+    ? {
+        icon: AlertTriangle,
+        bg: 'bg-red-50',
+        border: 'border-red-200',
+        text: 'text-red-800',
+        title: '⚠️ Obra Atrasada',
+        message: `Esta área continua com acesso restrito. Os trabalhos estão em andamento, mas ultrapassaram o prazo de conclusão previsto em ${daysDelayed} dia${daysDelayed !== 1 ? 's' : ''}.`,
+      }
+    : statusBanners[obra.status];
+
   const BannerIcon = banner.icon;
   const progressPct = getProgressPct(obra.starts_at, obra.ends_at, obra.status);
 
@@ -198,7 +222,7 @@ export const PublicObra: React.FC = () => {
               </div>
               <span className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 ${colors.bg} ${colors.text}`}>
                 <span className={`h-2 w-2 rounded-full ${colors.dot}`} />
-                {obraStatusLabels[obra.status]}
+                {isDelayed ? `Atrasada (${daysDelayed} dia${daysDelayed !== 1 ? 's' : ''})` : obraStatusLabels[obra.status]}
               </span>
             </div>
           </div>

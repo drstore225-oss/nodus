@@ -93,6 +93,7 @@ export const TicketsPage: React.FC = () => {
       user_id: user!.id,
       team_id: data.team_id || null,
       cost_center_id: data.cost_center_id || null,
+      building_id: data.building_id || null,
     });
     // Advance to photo attachment step
     setNewlyCreatedTicketId(created.id);

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { format, parseISO, differenceInDays } from 'date-fns';
+import React, { useState, useRef, useEffect } from 'react';
+import { format, parseISO, differenceInDays, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -7,11 +7,16 @@ import {
   useCreateObra,
   useUpdateObra,
   useDeleteObra,
+  useObraFiles,
+  useAddObraFile,
+  useDeleteObraFile,
   obraStatusLabels,
   obraStatusColors,
   type Obra,
   type ObraStatus,
 } from '../../hooks/useObras';
+import { useBuildings } from '../../hooks/useBuildings';
+import { supabase } from '../../lib/supabase';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import {
@@ -35,6 +40,14 @@ import {
   Briefcase,
   Wrench,
   Receipt,
+  FileText,
+  Image as ImageIcon,
+  Eye,
+  Download,
+  Upload,
+  Info,
+  Building,
+  Loader2
 } from 'lucide-react';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -87,6 +100,7 @@ const emptyForm = {
   executor_type: 'INTERNAL' as 'INTERNAL' | 'EXTERNAL',
   materials_budget: '',
   public_notes: '',
+  building_id: '',
 };
 
 // ─── Obra Card ────────────────────────────────────────────────────────────────
@@ -95,18 +109,31 @@ interface ObraCardProps {
   obra: Obra;
   onEdit: (obra: Obra) => void;
   onQr: (obra: Obra) => void;
+  onSelectProject?: (obraId: string) => void;
   canManage: boolean;
 }
 
-const ObraCard: React.FC<ObraCardProps> = ({ obra, onEdit, onQr, canManage }) => {
-  const colors = obraStatusColors[obra.status];
+const ObraCard: React.FC<ObraCardProps> = ({ obra, onEdit, onQr, onSelectProject, canManage }) => {
+  const now = startOfDay(new Date());
+  const end = startOfDay(parseISO(obra.ends_at));
+  const daysDelayed = differenceInDays(now, end);
+  const isDelayed = obra.status === 'IN_PROGRESS' && daysDelayed > 0;
+
+  const colors = isDelayed
+    ? { bg: 'bg-red-100', text: 'text-red-700', dot: 'bg-red-500' }
+    : obraStatusColors[obra.status];
+
   const range = formatDateRange(obra.starts_at, obra.ends_at);
   const isActive = obra.status === 'IN_PROGRESS';
 
   return (
     <div
       className={`bg-white rounded-xl border transition-all hover:shadow-md ${
-        isActive ? 'border-amber-300 ring-1 ring-amber-100' : 'border-slate-200'
+        isDelayed
+          ? 'border-red-300 ring-1 ring-red-100'
+          : isActive
+          ? 'border-amber-300 ring-1 ring-amber-100'
+          : 'border-slate-200'
       }`}
     >
       <div className="p-5">
@@ -128,7 +155,7 @@ const ObraCard: React.FC<ObraCardProps> = ({ obra, onEdit, onQr, canManage }) =>
           </div>
           <span className={`text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 flex items-center gap-1 ${colors.bg} ${colors.text}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${colors.dot}`} />
-            {obraStatusLabels[obra.status]}
+            {isDelayed ? `Atrasada (${daysDelayed} dia${daysDelayed !== 1 ? 's' : ''})` : obraStatusLabels[obra.status]}
           </span>
         </div>
 
@@ -173,13 +200,13 @@ const ObraCard: React.FC<ObraCardProps> = ({ obra, onEdit, onQr, canManage }) =>
         )}
 
         {/* Actions */}
-        <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
+        <div className="flex items-center gap-2 pt-3 border-t border-slate-100 flex-wrap">
           <button
             onClick={() => onQr(obra)}
             className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors font-medium"
           >
             <QrCode className="h-3.5 w-3.5" />
-            QR Code
+            QR
           </button>
           <a
             href={getPublicUrl(obra.id)}
@@ -188,8 +215,17 @@ const ObraCard: React.FC<ObraCardProps> = ({ obra, onEdit, onQr, canManage }) =>
             className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-700 transition-colors font-medium"
           >
             <ExternalLink className="h-3.5 w-3.5" />
-            Link Público
+            Público
           </a>
+          {onSelectProject && (
+            <button
+              onClick={() => onSelectProject(obra.id)}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors font-medium"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Projeto
+            </button>
+          )}
           {canManage && (
             <button
               onClick={() => onEdit(obra)}
@@ -285,6 +321,8 @@ interface ObraFormProps {
 }
 
 const ObraForm: React.FC<ObraFormProps> = ({ initial, onSubmit, onCancel, isLoading, mode, onDelete }) => {
+  const { profile } = useAuth();
+  const { data: buildings = [] } = useBuildings(profile?.institution_id);
   const [form, setForm] = useState({ ...emptyForm, ...initial });
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -321,9 +359,27 @@ const ObraForm: React.FC<ObraFormProps> = ({ initial, onSubmit, onCancel, isLoad
           />
         </div>
 
+        {/* Prédio / Edifício */}
+        <div>
+          <label className={labelCls}>Prédio / Edifício Vinculado</label>
+          <div className="relative">
+            <select
+              className={`${inputCls} pr-8 appearance-none`}
+              value={form.building_id || ''}
+              onChange={(e) => set('building_id', e.target.value)}
+            >
+              <option value="">Nenhum prédio (Localização livre)</option>
+              {buildings.map((b) => (
+                <option key={b.id} value={b.id}>{b.name} ({parseFloat(b.total_m2.toString()).toLocaleString('pt-BR')} m²)</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+          </div>
+        </div>
+
         {/* Local */}
         <div>
-          <label className={labelCls}>Área / Local de Isolamento</label>
+          <label className={labelCls}>Área / Local de Isolamento (Especificação)</label>
           <input className={inputCls} value={form.location} onChange={(e) => set('location', e.target.value)} placeholder="Ex: Ala Norte, 2º andar" />
         </div>
 
@@ -462,6 +518,101 @@ export const ObrasPage: React.FC = () => {
 
   const filtered = statusFilter ? obras.filter((o) => o.status === statusFilter) : obras;
 
+  const activeCount = obras.filter((o) => o.status === 'IN_PROGRESS').length;
+
+  const [activeTab, setActiveTab] = useState<'cronograma' | 'projetos'>('cronograma');
+  const [selectedObraId, setSelectedObraId] = useState<string>('');
+
+  // Seleciona a primeira obra por padrão na aba de projetos
+  useEffect(() => {
+    if (activeTab === 'projetos' && !selectedObraId && obras.length > 0) {
+      setSelectedObraId(obras[0].id);
+    }
+  }, [activeTab, obras, selectedObraId]);
+
+  const selectedObra = obras.find((o) => o.id === selectedObraId);
+
+  // Hooks de Projetos
+  const { data: files = [], isLoading: isFilesLoading } = useObraFiles(selectedObraId || null);
+  const addFileMutation = useAddObraFile();
+  const deleteFileMutation = useDeleteObraFile();
+
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [projectDescText, setProjectDescText] = useState('');
+
+  // Sincroniza a descrição do projeto quando a obra selecionada muda
+  useEffect(() => {
+    if (selectedObra) {
+      setProjectDescText(selectedObra.project_description ?? '');
+    }
+  }, [selectedObra]);
+
+  const handleSaveDescription = async () => {
+    if (!selectedObraId) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: selectedObraId,
+        project_description: projectDescText,
+      } as any);
+      setIsEditingDescription(false);
+    } catch (err: any) {
+      alert('Erro ao salvar descrição: ' + err.message);
+    }
+  };
+
+  // Uploads
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputBlueprintRef = useRef<HTMLInputElement>(null);
+  const fileInputGalleryRef = useRef<HTMLInputElement>(null);
+
+  const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>, type: 'BLUEPRINT' | 'IDEA_GALLERY') => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedObraId) return;
+
+    setIsUploadingFile(true);
+    setUploadError(null);
+
+    try {
+      const ext = file.name.split('.').pop() ?? 'jpg';
+      const path = `obras/${selectedObraId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from('attachments')
+        .upload(path, file, { cacheControl: '3600', upsert: false });
+
+      if (uploadErr) throw new Error(uploadErr.message);
+
+      const { data: urlData } = supabase.storage.from('attachments').getPublicUrl(path);
+
+      await addFileMutation.mutateAsync({
+        obra_id: selectedObraId,
+        file_name: file.name,
+        file_url: urlData.publicUrl,
+        file_type: type,
+      });
+
+    } catch (err: any) {
+      setUploadError(err.message || 'Erro ao fazer upload do arquivo.');
+    } finally {
+      setIsUploadingFile(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleDeleteFile = async (fileId: string) => {
+    if (!selectedObraId) return;
+    if (confirm('Deseja realmente remover este arquivo do projeto?')) {
+      try {
+        await deleteFileMutation.mutateAsync({ id: fileId, obraId: selectedObraId });
+      } catch (err: any) {
+        alert('Erro ao excluir arquivo: ' + err.message);
+      }
+    }
+  };
+
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
   const handleCreate = async (form: typeof emptyForm) => {
     if (!profile?.institution_id) return;
     await createMutation.mutateAsync({
@@ -470,6 +621,7 @@ export const ObrasPage: React.FC = () => {
       created_by: user!.id,
       starts_at: new Date(form.starts_at + 'T00:00:00').toISOString(),
       ends_at: new Date(form.ends_at + 'T23:59:59').toISOString(),
+      building_id: form.building_id || null,
     });
     setIsCreateOpen(false);
   };
@@ -481,6 +633,7 @@ export const ObrasPage: React.FC = () => {
       ...form,
       starts_at: new Date(form.starts_at + 'T00:00:00').toISOString(),
       ends_at: new Date(form.ends_at + 'T23:59:59').toISOString(),
+      building_id: form.building_id || null,
     });
     setEditObra(null);
   };
@@ -491,14 +644,17 @@ export const ObrasPage: React.FC = () => {
     setEditObra(null);
   };
 
-  const activeCount = obras.filter((o) => o.status === 'IN_PROGRESS').length;
+  const handleSelectProjectTab = (obraId: string) => {
+    setSelectedObraId(obraId);
+    setActiveTab('projetos');
+  };
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Obras</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Obras e Projetos</h1>
           <p className="text-sm text-slate-500 mt-1">
             {isLoading ? '...' : `${obras.length} obra${obras.length !== 1 ? 's' : ''} cadastrada${obras.length !== 1 ? 's' : ''}`}
             {activeCount > 0 && (
@@ -509,7 +665,7 @@ export const ObrasPage: React.FC = () => {
             )}
           </p>
         </div>
-        {canManage && (
+        {canManage && activeTab === 'cronograma' && (
           <Button onClick={() => setIsCreateOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Nova Obra
@@ -517,78 +673,348 @@ export const ObrasPage: React.FC = () => {
         )}
       </div>
 
-      {/* Active work banner */}
-      {activeCount > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
-          <div className="p-2 bg-amber-100 rounded-lg">
-            <HardHat className="h-5 w-5 text-amber-600" />
-          </div>
-          <div>
-            <p className="font-semibold text-amber-800 text-sm">
-              {activeCount === 1 ? '1 obra em andamento' : `${activeCount} obras em andamento`}
-            </p>
-            <p className="text-xs text-amber-600 mt-0.5">Há áreas com acesso restrito ou isolamento ativo no momento.</p>
-          </div>
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="flex gap-2 flex-wrap">
+      {/* Tabs */}
+      <div className="flex border-b border-slate-200">
         <button
-          onClick={() => setStatusFilter('')}
-          className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${
-            statusFilter === '' ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+          onClick={() => setActiveTab('cronograma')}
+          className={`py-2.5 px-4 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'cronograma'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
           }`}
         >
-          Todas
+          <CalendarRange className="h-4 w-4" />
+          Cronograma / Obras Ativas
         </button>
-        {STATUS_OPTIONS.map((s) => {
-          const c = obraStatusColors[s];
-          return (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(s)}
-              className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
-                statusFilter === s
-                  ? `${c.bg} ${c.text} ring-1 ring-current`
-                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <span className={`h-2 w-2 rounded-full ${statusFilter === s ? c.dot : 'bg-slate-300'}`} />
-              {obraStatusLabels[s]}
-            </button>
-          );
-        })}
+        <button
+          onClick={() => setActiveTab('projetos')}
+          className={`py-2.5 px-4 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'projetos'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+          }`}
+        >
+          <FileText className="h-4 w-4" />
+          Projetos e Plantas (Galeria de Ideias)
+        </button>
       </div>
 
-      {/* Content */}
-      {isLoading ? (
-        <div className="flex justify-center py-16">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
-          <HardHat className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-          <p className="text-slate-500 font-medium">
-            {statusFilter ? 'Nenhuma obra com este status' : 'Nenhuma obra cadastrada'}
-          </p>
-          {canManage && !statusFilter && (
-            <p className="text-slate-400 text-sm mt-1">
-              Clique em "Nova Obra" para cadastrar uma intervenção.
-            </p>
+      {activeTab === 'cronograma' ? (
+        <>
+          {/* Active work banner */}
+          {activeCount > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
+              <div className="p-2 bg-amber-100 rounded-lg">
+                <HardHat className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-amber-800 text-sm">
+                  {activeCount === 1 ? '1 obra em andamento' : `${activeCount} obras em andamento`}
+                </p>
+                <p className="text-xs text-amber-600 mt-0.5">Há áreas com acesso restrito ou isolamento ativo no momento.</p>
+              </div>
+            </div>
           )}
-        </div>
+
+          {/* Filters */}
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => setStatusFilter('')}
+              className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                statusFilter === '' ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              Todas
+            </button>
+            {STATUS_OPTIONS.map((s) => {
+              const c = obraStatusColors[s];
+              return (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
+                    statusFilter === s
+                      ? `${c.bg} ${c.text} ring-1 ring-current`
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${statusFilter === s ? c.dot : 'bg-slate-300'}`} />
+                  {obraStatusLabels[s]}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Content */}
+          {isLoading ? (
+            <div className="flex justify-center py-16">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
+              <HardHat className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+              <p className="text-slate-500 font-medium">
+                {statusFilter ? 'Nenhuma obra com este status' : 'Nenhuma obra cadastrada'}
+              </p>
+              {canManage && !statusFilter && (
+                <p className="text-slate-400 text-sm mt-1">
+                  Clique em "Nova Obra" para cadastrar uma intervenção.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filtered.map((obra) => (
+                <ObraCard
+                  key={obra.id}
+                  obra={obra}
+                  onEdit={setEditObra}
+                  onQr={setQrObra}
+                  onSelectProject={handleSelectProjectTab}
+                  canManage={canManage}
+                />
+              ))}
+            </div>
+          )}
+        </>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((obra) => (
-            <ObraCard
-              key={obra.id}
-              obra={obra}
-              onEdit={setEditObra}
-              onQr={setQrObra}
-              canManage={canManage}
-            />
-          ))}
+        <div className="space-y-6">
+          {/* Seletor de Obra para o Projeto */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+            <div className="space-y-1">
+              <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                <Building className="h-5 w-5 text-blue-600" />
+                Vincular Projeto à Obra
+              </h3>
+              <p className="text-xs text-slate-500">Selecione uma obra ativa da sua instituição para gerenciar plantas e referências.</p>
+            </div>
+            <div className="relative">
+              <select
+                className="h-10 rounded-lg border border-slate-300 pl-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white min-w-[280px] appearance-none"
+                value={selectedObraId}
+                onChange={(e) => setSelectedObraId(e.target.value)}
+              >
+                <option value="">-- Selecione uma Obra --</option>
+                {obras.map((o) => (
+                  <option key={o.id} value={o.id}>{o.title}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+            </div>
+          </div>
+
+          {!selectedObraId ? (
+            <div className="bg-white rounded-xl border border-slate-200 p-16 text-center shadow-sm">
+              <FileText className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+              <p className="text-slate-500 font-medium">Nenhuma obra selecionada</p>
+              <p className="text-slate-400 text-sm mt-1">Selecione uma obra no seletor acima para visualizar e gerenciar o projeto correspondente.</p>
+            </div>
+          ) : !selectedObra ? (
+            <div className="bg-white rounded-xl border border-slate-200 p-16 text-center shadow-sm">
+              <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+              <p className="text-slate-500 font-medium">Obra não encontrada</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* Coluna de Descrição e Plantas */}
+              <div className="lg:col-span-2 space-y-6">
+                
+                {/* Descrição do Projeto */}
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                  <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                    <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                      Descrição do Projeto
+                    </h2>
+                    {canManage && !isEditingDescription && (
+                      <Button size="sm" variant="outline" onClick={() => setIsEditingDescription(true)}>
+                        <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
+                      </Button>
+                    )}
+                  </div>
+                  <div className="p-6">
+                    {isEditingDescription ? (
+                      <div className="space-y-4">
+                        <textarea
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          rows={6}
+                          value={projectDescText}
+                          onChange={(e) => setProjectDescText(e.target.value)}
+                          placeholder="Descreva o projeto, materiais a serem usados, plantas e ideias..."
+                        />
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" size="sm" onClick={() => {
+                            setProjectDescText(selectedObra?.project_description ?? '');
+                            setIsEditingDescription(false);
+                          }}>Cancelar</Button>
+                          <Button size="sm" onClick={handleSaveDescription}>Salvar Projeto</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="prose max-w-none">
+                        {selectedObra?.project_description ? (
+                          <p className="text-slate-600 text-sm whitespace-pre-line leading-relaxed">{selectedObra.project_description}</p>
+                        ) : (
+                          <p className="text-slate-400 text-sm italic">Nenhum detalhe do projeto cadastrado para esta obra. Clique em "Editar" para descrever o que será feito.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Plantas Baixas */}
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                  <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                    <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                      Plantas do Projeto (PDF / Imagens)
+                    </h2>
+                    {canManage && (
+                      <div>
+                        <input
+                          type="file"
+                          ref={fileInputBlueprintRef}
+                          className="hidden"
+                          accept="image/*,application/pdf"
+                          onChange={(e) => handleUploadFile(e, 'BLUEPRINT')}
+                        />
+                        <Button size="sm" disabled={isUploadingFile} onClick={() => fileInputBlueprintRef.current?.click()}>
+                          {isUploadingFile ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
+                          Enviar Planta
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-6 space-y-3">
+                    {uploadError && <p className="text-xs text-red-600 bg-red-50 p-2 rounded">⚠️ {uploadError}</p>}
+                    
+                    {isFilesLoading ? (
+                      <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin text-blue-600" /></div>
+                    ) : files.filter(f => f.file_type === 'BLUEPRINT').length === 0 ? (
+                      <p className="text-sm text-slate-400 italic">Nenhuma planta anexada a este projeto.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-2">
+                        {files.filter(f => f.file_type === 'BLUEPRINT').map(file => (
+                          <div key={file.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:bg-slate-50">
+                            <div className="flex items-center gap-3">
+                              <FileText className="h-5 w-5 text-slate-400" />
+                              <div>
+                                <p className="text-sm font-medium text-slate-700 truncate max-w-[250px] sm:max-w-[400px]">{file.file_name}</p>
+                                <p className="text-[10px] text-slate-400">{format(parseISO(file.created_at), "dd/MM/yyyy HH:mm")}</p>
+                              </div>
+                            </div>
+                            <div className="flex gap-1.5">
+                              <a
+                                href={file.file_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                                title="Visualizar"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </a>
+                              <a
+                                href={file.file_url}
+                                download
+                                className="p-1.5 text-slate-600 hover:bg-slate-100 rounded"
+                                title="Download"
+                              >
+                                <Download className="h-4 w-4" />
+                              </a>
+                              {canManage && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteFile(file.id)}
+                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                                  title="Deletar"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Coluna da Galeria de Ideias */}
+              <div className="lg:col-span-1">
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-full min-h-[400px]">
+                  <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                    <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+                      <ImageIcon className="h-5 w-5 text-purple-600" />
+                      Galeria de Ideias
+                    </h2>
+                    {canManage && (
+                      <div>
+                        <input
+                          type="file"
+                          ref={fileInputGalleryRef}
+                          className="hidden"
+                          accept="image/*"
+                          onChange={(e) => handleUploadFile(e, 'IDEA_GALLERY')}
+                        />
+                        <button
+                          type="button"
+                          disabled={isUploadingFile}
+                          onClick={() => fileInputGalleryRef.current?.click()}
+                          className="p-1.5 text-purple-600 hover:bg-purple-50 border border-purple-200 rounded-lg"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-6 flex-1 overflow-y-auto">
+                    {isFilesLoading ? (
+                      <div className="flex justify-center p-4"><Loader2 className="h-6 w-6 animate-spin text-blue-600" /></div>
+                    ) : files.filter(f => f.file_type === 'IDEA_GALLERY').length === 0 ? (
+                      <p className="text-sm text-slate-400 italic text-center py-12">Nenhuma imagem inspiradora adicionada à galeria.</p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        {files.filter(f => f.file_type === 'IDEA_GALLERY').map(file => (
+                          <div key={file.id} className="group relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50 shadow-sm hover:shadow transition-shadow">
+                            <img
+                              src={file.file_url}
+                              alt={file.file_name}
+                              className="w-full h-full object-cover cursor-pointer"
+                              onClick={() => setLightboxUrl(file.file_url)}
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setLightboxUrl(file.file_url)}
+                                className="p-1.5 bg-white text-slate-800 rounded-full hover:bg-slate-100 transition-colors shadow"
+                                title="Ampliar"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+                              {canManage && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteFile(file.id)}
+                                  className="p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow"
+                                  title="Remover"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          )}
         </div>
       )}
 
@@ -618,6 +1044,7 @@ export const ObrasPage: React.FC = () => {
               executor_type: editObra.executor_type,
               materials_budget: editObra.materials_budget ?? '',
               public_notes: editObra.public_notes ?? '',
+              building_id: editObra.building_id ?? '',
             }}
             onSubmit={handleUpdate}
             onCancel={() => setEditObra(null)}
@@ -629,6 +1056,16 @@ export const ObrasPage: React.FC = () => {
 
       {/* QR Code Modal */}
       {qrObra && <QrModal obra={qrObra} onClose={() => setQrObra(null)} />}
+
+      {/* Lightbox Modal */}
+      {lightboxUrl && (
+        <Modal isOpen onClose={() => setLightboxUrl(null)} title="Visualização da Ideia" size="lg">
+          <div className="flex flex-col items-center gap-4 bg-slate-900 p-2 rounded-xl overflow-hidden">
+            <img src={lightboxUrl} alt="Ideia Ampliada" className="max-h-[70vh] object-contain rounded-lg" />
+            <Button variant="outline" className="text-white hover:text-slate-800" onClick={() => setLightboxUrl(null)}>Fechar</Button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };

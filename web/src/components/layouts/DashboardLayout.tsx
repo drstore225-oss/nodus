@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Outlet, Navigate, useLocation, NavLink } from 'react-router-dom';
 import { NotificationBell } from '../notifications/NotificationBell';
+import { NodusAIChatbot } from '../ai/NodusAIChatbot';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../ui/Button';
@@ -206,6 +207,9 @@ export const DashboardLayout: React.FC = () => {
         <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8">
           <Outlet />
         </main>
+
+        {/* Chatbot de IA Flutuante */}
+        <NodusAIChatbot />
       </div>
     </div>
   );
