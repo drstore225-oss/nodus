@@ -45,7 +45,6 @@ import {
   Eye,
   Download,
   Upload,
-  Info,
   Building,
   Loader2
 } from 'lucide-react';

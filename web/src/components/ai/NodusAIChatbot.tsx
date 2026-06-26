@@ -3,14 +3,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import {
   Sparkles,
-  X,
   Send,
   Loader2,
   Building,
-  AlertTriangle,
   Activity,
   DollarSign,
-  TrendingUp,
   Minus
 } from 'lucide-react';
 
