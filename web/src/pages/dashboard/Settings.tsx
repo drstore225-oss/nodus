@@ -30,6 +30,7 @@ export const SettingsPage: React.FC = () => {
 
   // Gemini API Key State
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('nodus_gemini_api_key') || '');
+  const [isSavingGeminiKey, setIsSavingGeminiKey] = useState(false);
 
   // Buildings State & Hooks
   const { data: buildings = [], isLoading: isBuildingsLoading } = useBuildings(profile?.institution_id);
@@ -124,6 +125,9 @@ export const SettingsPage: React.FC = () => {
         city: institution.city || '',
         state: institution.state || '',
       });
+      if (institution.gemini_api_key !== undefined) {
+        setGeminiKey(institution.gemini_api_key || '');
+      }
     }
   }, [institution]);
 
@@ -144,6 +148,27 @@ export const SettingsPage: React.FC = () => {
       alert('Dados da instituição atualizados com sucesso!');
     } catch (error: any) {
       alert('Erro ao atualizar instituição: ' + error.message);
+    }
+  };
+
+  const handleSaveGeminiKey = async () => {
+    if (!institution?.id) return;
+    setIsSavingGeminiKey(true);
+    try {
+      await updateInstitutionMutation.mutateAsync({
+        id: institution.id,
+        gemini_api_key: geminiKey || null,
+      });
+      if (geminiKey) {
+        localStorage.setItem('nodus_gemini_api_key', geminiKey);
+      } else {
+        localStorage.removeItem('nodus_gemini_api_key');
+      }
+      alert('Chave API do Gemini atualizada com sucesso no banco de dados!');
+    } catch (error: any) {
+      alert('Erro ao salvar chave: ' + error.message);
+    } finally {
+      setIsSavingGeminiKey(false);
     }
   };
 
@@ -201,16 +226,28 @@ export const SettingsPage: React.FC = () => {
               Insira sua API Key do Gemini para ativar análises inteligentes avançadas no Chatbot.
             </p>
             <div className="space-y-3">
-              <input
-                type="password"
-                placeholder="Insira sua Gemini Key..."
-                className="w-full text-xs h-9 rounded-lg border border-slate-300 px-3 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                value={geminiKey}
-                onChange={(e) => {
-                  setGeminiKey(e.target.value);
-                  localStorage.setItem('nodus_gemini_api_key', e.target.value);
-                }}
-              />
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  placeholder="Insira sua Gemini Key..."
+                  className="flex-1 text-xs h-9 rounded-lg border border-slate-300 px-3 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  value={geminiKey}
+                  onChange={(e) => {
+                    setGeminiKey(e.target.value);
+                    localStorage.setItem('nodus_gemini_api_key', e.target.value);
+                  }}
+                />
+                {canEditInstitution && (
+                  <Button
+                    size="sm"
+                    onClick={handleSaveGeminiKey}
+                    isLoading={isSavingGeminiKey}
+                    disabled={geminiKey === (institution?.gemini_api_key || '')}
+                  >
+                    <Save className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
               {geminiKey ? (
                 <p className="text-[10px] text-emerald-600 flex items-center gap-1 font-semibold">
                   <CheckCircle2 className="h-3 w-3" />

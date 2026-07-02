@@ -25,6 +25,7 @@ export const NodusAIChatbot: React.FC = () => {
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [dbStats, setDbStats] = useState<any>(null);
+  const [dbGeminiKey, setDbGeminiKey] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Mensagem inicial de boas-vindas
@@ -83,6 +84,21 @@ export const NodusAIChatbot: React.FC = () => {
         tickets: tData || [],
         obras: oData || []
       });
+
+      // 5. Institution (Gemini API Key)
+      try {
+        const { data: instData } = await supabase
+          .from('institutions')
+          .select('gemini_api_key')
+          .eq('id', institutionId)
+          .single();
+
+        if (instData?.gemini_api_key) {
+          setDbGeminiKey(instData.gemini_api_key);
+        }
+      } catch (err) {
+        console.warn('Erro ao carregar chave do Gemini do banco:', err);
+      }
     } catch (err) {
       console.error('Erro ao buscar estatísticas para IA:', err);
     }
@@ -103,7 +119,7 @@ export const NodusAIChatbot: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const geminiKey = localStorage.getItem('nodus_gemini_api_key')?.trim();
+      const geminiKey = dbGeminiKey?.trim() || localStorage.getItem('nodus_gemini_api_key')?.trim();
       const stats = dbStats || { buildings: [], profiles: [], tickets: [], obras: [] };
 
       // Computar métricas básicas no frontend

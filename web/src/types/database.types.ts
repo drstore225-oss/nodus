@@ -15,6 +15,7 @@ export interface Institution {
   neighborhood: string | null;
   city: string | null;
   state: string | null;
+  gemini_api_key?: string | null;
   created_at: string;
 }
 
