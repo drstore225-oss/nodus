@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { useUsers, useUpdateUserRole } from '../../hooks/useUsers';
+import { useUsers, useUpdateUserRole, useCreateUser } from '../../hooks/useUsers';
 import type { ProfileWithTeam } from '../../hooks/useUsers';
 import { useInstitutions } from '../../hooks/useInstitutions';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,7 +12,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Select } from '../../components/ui/Select';
 import { Label } from '../../components/ui/Label';
-import { Users, Search, Pencil } from 'lucide-react';
+import { Users, Search, Pencil, Plus } from 'lucide-react';
 
 const roleLabels: Record<UserRole, string> = {
   SUPERADMIN: 'Super Admin',
@@ -36,6 +36,8 @@ export const UsersPage: React.FC = () => {
   const { profile } = useAuth();
   const [search, setSearch] = useState('');
   const [editingUser, setEditingUser] = useState<ProfileWithTeam | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (profile?.role !== 'SUPERADMIN') {
     return <Navigate to="/" replace />;
@@ -44,12 +46,30 @@ export const UsersPage: React.FC = () => {
   const { data: users = [], isLoading } = useUsers();
   const { data: institutions = [] } = useInstitutions();
   const updateMutation = useUpdateUserRole();
+  const createMutation = useCreateUser();
 
   const { register, handleSubmit, reset } = useForm<{
     role: UserRole;
     institution_id: string;
     team_id: string;
   }>();
+
+  const {
+    register: registerCreate,
+    handleSubmit: handleSubmitCreate,
+    reset: resetCreate,
+    formState: { errors: createErrors },
+  } = useForm<{
+    email: string;
+    password: string;
+    role: UserRole;
+    institution_id: string;
+  }>({
+    defaultValues: {
+      role: 'SOLICITANTE' as UserRole,
+      institution_id: '',
+    },
+  });
 
   const filtered = users.filter((u) =>
     u.email.toLowerCase().includes(search.toLowerCase()) ||
@@ -76,14 +96,53 @@ export const UsersPage: React.FC = () => {
     setEditingUser(null);
   };
 
+  const onCreateSubmit = async (data: {
+    email: string;
+    password: string;
+    role: UserRole;
+    institution_id: string;
+  }) => {
+    setErrorMsg(null);
+    try {
+      await createMutation.mutateAsync({
+        email: data.email,
+        password: data.password,
+        role: data.role,
+        institutionId: data.institution_id || null,
+      });
+      setIsCreating(false);
+      resetCreate();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Erro ao criar usuário');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800">Usuários</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Gerencie perfis de acesso e funções no sistema
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Usuários</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Gerencie perfis de acesso e funções no sistema
+          </p>
+        </div>
+        <Button
+          onClick={() => {
+            setErrorMsg(null);
+            setIsCreating(true);
+            resetCreate({
+              email: '',
+              password: '',
+              role: 'SOLICITANTE' as UserRole,
+              institution_id: '',
+            });
+          }}
+          className="flex items-center gap-2"
+        >
+          <Plus className="h-4 w-4" />
+          Adicionar Usuário
+        </Button>
       </div>
 
       {/* Search */}
@@ -212,6 +271,90 @@ export const UsersPage: React.FC = () => {
             </div>
           </form>
         )}
+      </Modal>
+
+      {/* Create Modal */}
+      <Modal
+        isOpen={isCreating}
+        onClose={() => setIsCreating(false)}
+        title="Adicionar Usuário"
+        size="md"
+      >
+        <form onSubmit={handleSubmitCreate(onCreateSubmit)} className="space-y-4">
+          {errorMsg && (
+            <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm flex items-center gap-2">
+              <span className="flex-shrink-0">⚠</span>
+              {errorMsg}
+            </div>
+          )}
+
+          <div>
+            <Label htmlFor="create-email">E-mail</Label>
+            <div className="mt-1">
+              <input
+                id="create-email"
+                type="email"
+                placeholder="exemplo@email.com"
+                className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                {...registerCreate('email', { required: 'E-mail é obrigatório' })}
+              />
+              {createErrors.email && (
+                <span className="text-xs text-red-500 mt-1 block">{createErrors.email.message}</span>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="create-password">Senha</Label>
+            <div className="mt-1">
+              <input
+                id="create-password"
+                type="password"
+                placeholder="Mínimo 6 caracteres"
+                className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                {...registerCreate('password', {
+                  required: 'Senha é obrigatória',
+                  minLength: { value: 6, message: 'A senha deve ter no mínimo 6 caracteres' },
+                })}
+              />
+              {createErrors.password && (
+                <span className="text-xs text-red-500 mt-1 block">{createErrors.password.message}</span>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="create-role">Função (Role)</Label>
+            <div className="mt-1">
+              <Select
+                id="create-role"
+                options={roleOptions}
+                {...registerCreate('role', { required: true })}
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="create-institution">Instituição</Label>
+            <div className="mt-1">
+              <Select
+                id="create-institution"
+                placeholder="Nenhuma (Superadmin)"
+                options={institutions.map((i) => ({ value: i.id, label: i.fantasy_name }))}
+                {...registerCreate('institution_id')}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+            <Button type="button" variant="outline" onClick={() => setIsCreating(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" isLoading={createMutation.isPending}>
+              Criar Usuário
+            </Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

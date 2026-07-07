@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../lib/supabase';
+import { supabase, createSecondaryClient } from '../lib/supabase';
 import type { Profile, UserRole } from '../types/database.types';
 
 export interface ProfileWithTeam extends Profile {
@@ -21,6 +21,48 @@ export function useUsers(institutionId?: string) {
       const { data, error } = await query;
       if (error) throw error;
       return data as ProfileWithTeam[];
+    },
+  });
+}
+
+export function useCreateUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      email,
+      password,
+      role,
+      institutionId,
+      teamId,
+    }: {
+      email: string;
+      password: string;
+      role: UserRole;
+      institutionId?: string | null;
+      teamId?: string | null;
+    }) => {
+      const tempClient = createSecondaryClient();
+      const { data, error } = await tempClient.auth.signUp({
+        email,
+        password,
+      });
+      if (error) throw error;
+      if (!data.user) throw new Error('Erro ao criar usuário');
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          role,
+          institution_id: institutionId || null,
+          team_id: teamId || null,
+        })
+        .eq('id', data.user.id);
+
+      if (updateError) throw updateError;
+      return data.user;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
     },
   });
 }
