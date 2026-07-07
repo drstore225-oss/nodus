@@ -75,7 +75,7 @@ const navItems: NavItem[] = [
   { to: '/institucoes', label: 'Instituições', icon: Building2, roles: ['SUPERADMIN', 'ADMIN'] },
   { to: '/planos-manutencao', label: 'Rotinas', icon: Activity, roles: ['SUPERADMIN', 'ADMIN', 'GESTOR'] },
   { to: '/equipes', label: 'Equipes', icon: UsersRound, roles: ['SUPERADMIN', 'ADMIN', 'GESTOR'] },
-  { to: '/usuarios', label: 'Usuários', icon: Users, roles: ['SUPERADMIN', 'ADMIN'] },
+  { to: '/usuarios', label: 'Usuários', icon: Users, roles: ['SUPERADMIN'] },
   { to: '/centros-custo', label: 'Centros de Custo', icon: Layers, roles: ['SUPERADMIN', 'ADMIN', 'GESTOR'] },
   { to: '/configuracoes', label: 'Configurações', icon: Settings },
 ];

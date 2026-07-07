@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useUsers, useUpdateUserRole } from '../../hooks/useUsers';
 import type { ProfileWithTeam } from '../../hooks/useUsers';
@@ -36,10 +37,11 @@ export const UsersPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [editingUser, setEditingUser] = useState<ProfileWithTeam | null>(null);
 
-  // SUPERADMIN sees all, ADMIN sees only their institution
-  const { data: users = [], isLoading } = useUsers(
-    profile?.role === 'SUPERADMIN' ? undefined : profile?.institution_id ?? undefined
-  );
+  if (profile?.role !== 'SUPERADMIN') {
+    return <Navigate to="/" replace />;
+  }
+
+  const { data: users = [], isLoading } = useUsers();
   const { data: institutions = [] } = useInstitutions();
   const updateMutation = useUpdateUserRole();
 
